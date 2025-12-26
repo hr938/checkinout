@@ -391,7 +391,7 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                         {!readOnly && (
                             <Button
                                 type="submit"
-                                className="flex-1 h-12 bg-[#553734] hover:bg-[#553734]/90 text-white rounded-xl"
+                                className="flex-1 h-12 bg-primary-dark hover:bg-primary-dark/90 text-white rounded-xl"
                                 disabled={loading}
                             >
                                 {loading ? "กำลังบันทึก..." : employee ? "บันทึกการแก้ไข" : "เพิ่มพนักงาน"}

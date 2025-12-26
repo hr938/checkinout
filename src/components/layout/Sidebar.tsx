@@ -20,13 +20,13 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
 const menuItems = [
-    { icon: Search, label: "Search", href: "/admin/search" },
-    { icon: Table, label: "Data Table", href: "/admin" },
-    { icon: Users, label: "Employee", href: "/admin/employee" },
-    { icon: Shield, label: "Admins", href: "/admin/admins" },
-    { icon: FileText, label: "Leave", href: "/admin/leave" },
-    { icon: Clock, label: "OT", href: "/admin/ot" },
-    { icon: BarChart2, label: "Analytics", href: "/admin/analytics" },
+    { icon: Search, label: "ค้นหา", href: "/admin/search" },
+    { icon: Table, label: "ตารางข้อมูล", href: "/admin" },
+    { icon: Users, label: "พนักงาน", href: "/admin/employee" },
+    { icon: Shield, label: "ผู้ดูแลระบบ", href: "/admin/admins" },
+    { icon: FileText, label: "การลา", href: "/admin/leave" },
+    { icon: Clock, label: "ขอทำงานล่วงเวลา", href: "/admin/ot" },
+    { icon: BarChart2, label: "ภาพรวม", href: "/admin/analytics" },
     { icon: Calculator, label: "เงินเดือน", href: "/admin/payroll" },
 ];
 
@@ -70,7 +70,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
                             </div>
                         </div>
                         <div>
-                            <p className="text-xs text-gray-500">Welcome back,</p>
+                            <p className="text-xs text-gray-500">ยินดีต้อนรับ,</p>
                             <p className="font-bold text-gray-800 truncate max-w-[100px]">{adminProfile?.name || "Admin"}</p>
                             <p className="text-[10px] text-gray-400 uppercase tracking-wider">{adminProfile?.role || "Guest"}</p>
                         </div>
@@ -112,14 +112,14 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
                 <div className="p-4 space-y-1 border-t border-gray-200/50">
                     <button className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-500 hover:text-gray-900 hover:bg-white/50 rounded-xl transition-colors">
                         <HelpCircle className="w-5 h-5 text-gray-400" />
-                        Support
+                        ช่วยเหลือ
                     </button>
                     <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
                     >
                         <LogOut className="w-5 h-5 text-gray-400" />
-                        Sign Out
+                        ออกจากระบบ
                     </button>
                 </div>
             </aside>

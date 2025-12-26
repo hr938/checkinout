@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Save, Clock, AlertCircle, CheckCircle2, DollarSign, HardDrive, Calendar, Plus, Trash2, MapPin, Crosshair, Database, ExternalLink, RefreshCw, Copy, FileJson } from "lucide-react";
+import { Save, Clock, AlertCircle, CheckCircle2, DollarSign, HardDrive, Calendar, Plus, Trash2, MapPin, Crosshair, Database, ExternalLink, RefreshCw, Copy, FileJson, Briefcase } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { WORK_TIME_CONFIG } from "@/lib/workTime";
-import { systemConfigService, type SystemConfig } from "@/lib/firestore";
+import { systemConfigService, type SystemConfig, employeeService } from "@/lib/firestore";
 import { getStorageUsage, deleteOldPhotos, type StorageStats, PHOTO_STORAGE_LIMIT } from "@/lib/storage";
 import { checkAllIndexes, type IndexCheckResult } from "@/lib/indexChecker";
 
@@ -64,6 +64,41 @@ export default function SettingsPage() {
     const [indexResults, setIndexResults] = useState<IndexCheckResult[]>([]);
     const [checkingIndexes, setCheckingIndexes] = useState(false);
     const [showIndexModal, setShowIndexModal] = useState(false);
+
+    const [departments, setDepartments] = useState<string[]>([]);
+    const [positions, setPositions] = useState<string[]>([]);
+    const [loadingDepartments, setLoadingDepartments] = useState(true);
+
+    // Bulk Department Config State
+    const [selectedDepartmentsBulk, setSelectedDepartmentsBulk] = useState<string[]>([]);
+    const [bulkTimeConfig, setBulkTimeConfig] = useState({
+        checkInHour: 9,
+        checkInMinute: 0,
+        checkOutHour: 18,
+        checkOutMinute: 0
+    });
+
+    useEffect(() => {
+        const loadEmployeeData = async () => {
+            try {
+                const employees = await employeeService.getAll();
+
+                // Departments
+                const uniqueDepts = Array.from(new Set(employees.map(e => e.department).filter(Boolean))) as string[];
+                setDepartments(uniqueDepts.sort());
+
+                // Positions
+                const uniquePositions = Array.from(new Set(employees.map(e => e.position).filter(Boolean))) as string[];
+                setPositions(uniquePositions.sort());
+
+            } catch (error) {
+                console.error("Error loading employee data:", error);
+            } finally {
+                setLoadingDepartments(false);
+            }
+        };
+        loadEmployeeData();
+    }, []);
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -667,6 +702,161 @@ export default function SettingsPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Department Schedule Settings (Multi-select) */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+                            <Briefcase className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-800">เวลาทำงานตามแผนก</h2>
+                            <p className="text-sm text-gray-500">กำหนดเวลาเข้า-ออกงานตามแผนก (เลือกหลายแผนกได้)</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Department List */}
+                        <div className="md:col-span-1 border border-gray-200 rounded-xl overflow-hidden flex flex-col max-h-[400px]">
+                            <div className="bg-gray-50 p-3 border-b border-gray-200 font-medium text-gray-700 flex justify-between items-center">
+                                <span>เลือกแผนก ({selectedDepartmentsBulk.length})</span>
+                                <button
+                                    onClick={() => setSelectedDepartmentsBulk(selectedDepartmentsBulk.length === departments.length ? [] : departments)}
+                                    className="text-xs text-blue-600 hover:text-blue-800"
+                                >
+                                    {selectedDepartmentsBulk.length === departments.length ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
+                                </button>
+                            </div>
+                            <div className="overflow-y-auto p-2 space-y-1">
+                                {departments.map(dept => {
+                                    const config = settings.departmentWorkTimes?.[dept];
+                                    const hasConfig = !!config;
+                                    return (
+                                        <label key={dept} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-gray-50 ${selectedDepartmentsBulk.includes(dept) ? 'bg-blue-50' : ''}`}>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedDepartmentsBulk.includes(dept)}
+                                                onChange={() => {
+                                                    if (selectedDepartmentsBulk.includes(dept)) {
+                                                        setSelectedDepartmentsBulk(selectedDepartmentsBulk.filter(d => d !== dept));
+                                                    } else {
+                                                        setSelectedDepartmentsBulk([...selectedDepartmentsBulk, dept]);
+                                                    }
+                                                }}
+                                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-medium text-gray-900 truncate">{dept}</div>
+                                                {hasConfig && (
+                                                    <div className="text-xs text-blue-600">
+                                                        {String(config.checkInHour).padStart(2, '0')}:{String(config.checkInMinute).padStart(2, '0')} - {String(config.checkOutHour).padStart(2, '0')}:{String(config.checkOutMinute).padStart(2, '0')}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </label>
+                                    )
+                                })}
+                                {departments.length === 0 && <p className="text-sm text-gray-500 p-2 text-center">ไม่พบข้อมูลแผนก</p>}
+                            </div>
+                        </div>
+
+                        {/* Configuration Panel */}
+                        <div className="md:col-span-2 space-y-4">
+                            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                <h3 className="font-medium text-gray-800 mb-4">กำหนดเวลาสำหรับแผนกที่เลือก</h3>
+
+                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1">เวลาเข้างาน</label>
+                                        <div className="flex gap-2">
+                                            <select
+                                                value={bulkTimeConfig.checkInHour}
+                                                onChange={(e) => setBulkTimeConfig({ ...bulkTimeConfig, checkInHour: parseInt(e.target.value) })}
+                                                className="flex-1 px-2 py-1.5 border rounded-lg text-sm"
+                                            >
+                                                {Array.from({ length: 24 }).map((_, i) => <option key={i} value={i}>{i.toString().padStart(2, '0')}</option>)}
+                                            </select>
+                                            <span className="self-center">:</span>
+                                            <select
+                                                value={bulkTimeConfig.checkInMinute}
+                                                onChange={(e) => setBulkTimeConfig({ ...bulkTimeConfig, checkInMinute: parseInt(e.target.value) })}
+                                                className="flex-1 px-2 py-1.5 border rounded-lg text-sm"
+                                            >
+                                                {[0, 15, 30, 45].map(m => <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1">เวลาออกงาน</label>
+                                        <div className="flex gap-2">
+                                            <select
+                                                value={bulkTimeConfig.checkOutHour}
+                                                onChange={(e) => setBulkTimeConfig({ ...bulkTimeConfig, checkOutHour: parseInt(e.target.value) })}
+                                                className="flex-1 px-2 py-1.5 border rounded-lg text-sm"
+                                            >
+                                                {Array.from({ length: 24 }).map((_, i) => <option key={i} value={i}>{i.toString().padStart(2, '0')}</option>)}
+                                            </select>
+                                            <span className="self-center">:</span>
+                                            <select
+                                                value={bulkTimeConfig.checkOutMinute}
+                                                onChange={(e) => setBulkTimeConfig({ ...bulkTimeConfig, checkOutMinute: parseInt(e.target.value) })}
+                                                className="flex-1 px-2 py-1.5 border rounded-lg text-sm"
+                                            >
+                                                {[0, 15, 30, 45].map(m => <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <Button
+                                        onClick={() => {
+                                            if (selectedDepartmentsBulk.length === 0) return alert("กรุณาเลือกแผนกอย่างน้อย 1 รายการ");
+                                            const newDeptTimes = { ...(settings.departmentWorkTimes || {}) };
+                                            selectedDepartmentsBulk.forEach(dept => {
+                                                newDeptTimes[dept] = { ...bulkTimeConfig };
+                                            });
+                                            setSettings({ ...settings, departmentWorkTimes: newDeptTimes });
+                                            setSelectedDepartmentsBulk([]);
+                                            alert(`บันทึกการตั้งค่าสำหรับ ${selectedDepartmentsBulk.length} แผนกเรียบร้อยแล้ว`);
+                                        }}
+                                        disabled={selectedDepartmentsBulk.length === 0}
+                                        className="flex-1 gap-2"
+                                    >
+                                        <Save className="w-4 h-4" />
+                                        บันทึกค่า ({selectedDepartmentsBulk.length})
+                                    </Button>
+                                    <Button
+                                        onClick={() => {
+                                            if (selectedDepartmentsBulk.length === 0) return alert("กรุณาเลือกแผนกอย่างน้อย 1 รายการ");
+                                            const newDeptTimes = { ...(settings.departmentWorkTimes || {}) };
+                                            let count = 0;
+                                            selectedDepartmentsBulk.forEach(dept => {
+                                                if (newDeptTimes[dept]) {
+                                                    delete newDeptTimes[dept];
+                                                    count++;
+                                                }
+                                            });
+                                            setSettings({ ...settings, departmentWorkTimes: newDeptTimes });
+                                            setSelectedDepartmentsBulk([]);
+                                            alert(`ลบการตั้งค่าสำหรับ ${count} แผนกเรียบร้อยแล้ว`);
+                                        }}
+                                        variant="outline"
+                                        disabled={selectedDepartmentsBulk.length === 0}
+                                        className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+                                    >
+                                        ล้างค่าที่ตั้งไว้
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                💡 เลือกหลายแผนกเพื่อกำหนดเวลาเดียวกัน หรือแก้ไข/ลบค่าเดิม
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
 
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
                     <div className="flex items-center gap-3 mb-6">

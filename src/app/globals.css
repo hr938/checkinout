@@ -5,10 +5,10 @@
   --primary: #059669;
   --primary-dark: #064E3B;
   --secondary: #313131;
-  --accent: #FFFFFF;
+  --accent: #afa0a0;
   --text: #000000;
   --subtext: #6B7280;
-  --border: #E5E7EB;
+  --border: #d6d6d6;
   --success: #10B981;
   --error: #EF4444;
   --warning: #F59E0B;
@@ -26,9 +26,9 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #111827;
-    --foreground: #1b1b1b;
+    --foreground: #000000;
     --card: #1F2937;
-    --border: #374151;
+    --border: #d6d6d6;
   }
 }
 

@@ -71,6 +71,8 @@ export default function CheckInPage() {
     // Settings
     const [requirePhoto, setRequirePhoto] = useState(true);
     const [workTimeEnabled, setWorkTimeEnabled] = useState(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [systemConfig, setSystemConfig] = useState<any>(null);
     const [locationConfig, setLocationConfig] = useState<{
         enabled: boolean;
         latitude: number;
@@ -107,6 +109,7 @@ export default function CheckInPage() {
             try {
                 const config = await systemConfigService.get();
                 if (config) {
+                    setSystemConfig(config);
                     setRequirePhoto(config.requirePhoto ?? true);
                     setWorkTimeEnabled(config.workTimeEnabled ?? true);
                     if (config.locationConfig) {
@@ -284,13 +287,29 @@ export default function CheckInPage() {
                 let statusText = "";
                 let statusColor = "#666666";
 
-                if (workTimeEnabled) {
-                    if (type === "เข้างาน" && isLate(time)) {
-                        const lateMinutes = getLateMinutes(time);
+                if (workTimeEnabled && systemConfig) {
+                    // Determine Work Time Config for this employee
+                    // Priority: Department > Global
+                    const deptOverride = employee?.department && systemConfig?.departmentWorkTimes ? systemConfig.departmentWorkTimes[employee.department] : undefined;
+
+                    const checkInConfig = {
+                        hour: deptOverride?.checkInHour ?? systemConfig?.checkInHour ?? 9,
+                        minute: deptOverride?.checkInMinute ?? systemConfig?.checkInMinute ?? 0,
+                        gracePeriod: deptOverride?.lateGracePeriod ?? systemConfig?.lateGracePeriod ?? 0
+                    };
+
+                    const checkOutConfig = {
+                        hour: deptOverride?.checkOutHour ?? systemConfig?.checkOutHour ?? 18,
+                        minute: deptOverride?.checkOutMinute ?? systemConfig?.checkOutMinute ?? 0,
+                        minOTMinutes: systemConfig?.minOTMinutes ?? 30
+                    };
+
+                    if (type === "เข้างาน" && isLate(time, checkInConfig)) {
+                        const lateMinutes = getLateMinutes(time, checkInConfig);
                         statusText = `สาย ${formatMinutesToHours(lateMinutes)}`;
                         statusColor = "#ef4444"; // Red
-                    } else if (type === "ออกงาน" && isEligibleForOT(time)) {
-                        const otMinutes = getOTMinutes(time);
+                    } else if (type === "ออกงาน" && isEligibleForOT(time, checkOutConfig)) {
+                        const otMinutes = getOTMinutes(time, checkOutConfig);
                         statusText = `ล่วงเวลา ${formatMinutesToHours(otMinutes)}`;
                         statusColor = "#a855f7"; // Purple
                     } else if (type === "เข้างาน") {
@@ -682,7 +701,7 @@ export default function CheckInPage() {
 
             <Button
                 onClick={() => setStep(2)}
-                className="w-full h-14 text-lg rounded-2xl bg-[#0047BA] hover:bg-[#00338D] shadow-lg shadow-blue-900/20 mt-4"
+                className="w-full h-14 text-lg rounded-2xl bg-green-500 hover:bg-green-500 shadow-lg shadow-blue-900/20 mt-4"
             >
                 ถัดไป
             </Button>
@@ -751,7 +770,7 @@ export default function CheckInPage() {
                 <Button
                     onClick={() => setStep(3)}
                     disabled={!photo}
-                    className="flex-1 h-14 text-lg rounded-2xl bg-[#0047BA] hover:bg-[#00338D] shadow-lg shadow-blue-900/20"
+                    className="flex-1 h-14 text-lg rounded-2xl bg-green-600 hover:bg-green-700 shadow-lg shadow-blue-900/20"
                 >
                     ถัดไป
                 </Button>
@@ -844,7 +863,7 @@ export default function CheckInPage() {
                 <Button
                     onClick={handleSubmit}
                     disabled={loading || !location || showSuccess || (!isLocationValid && !locationNote.trim())}
-                    className="w-2/3 h-14 text-lg rounded-2xl bg-[#0047BA] hover:bg-[#00338D] shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-2/3 h-14 text-lg rounded-2xl bg-green-600 hover:bg-green-700 shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {loading ? "กำลังบันทึก..." : showSuccess ? "สำเร็จ!" : "ยืนยัน"}
                 </Button>
@@ -859,7 +878,7 @@ export default function CheckInPage() {
                 {/* Success Notification */}
                 {showSuccess && (
                     <div className="fixed top-0 left-0 right-0 z-50 p-4 animate-in slide-in-from-top-10 fade-in duration-300">
-                        <div className="bg-[#1DB446] text-white px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3 mx-auto max-w-sm">
+                        <div className="bg-[#00BF4D] text-white px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3 mx-auto max-w-sm">
                             <div className="p-2 bg-white/20 rounded-full">
                                 <CheckCircle className="w-5 h-5 text-white" />
                             </div>

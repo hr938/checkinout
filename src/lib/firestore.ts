@@ -522,6 +522,22 @@ export interface SystemConfig {
     adminLineGroupId?: string; // Line Group ID for admin notifications
     enableDailyReport?: boolean; // Enable daily summary report
     allowNewRegistration?: boolean; // Allow new employee registration
+    // Department Specific Work Times
+    departmentWorkTimes?: Record<string, {
+        checkInHour: number;
+        checkInMinute: number;
+        checkOutHour: number;
+        checkOutMinute: number;
+        lateGracePeriod?: number; // Override grace period (optional)
+    }>;
+    // Position Specific Work Times
+    positionWorkTimes?: Record<string, {
+        checkInHour: number;
+        checkInMinute: number;
+        checkOutHour: number;
+        checkOutMinute: number;
+        lateGracePeriod?: number; // Override grace period (optional)
+    }>;
 }
 // System Config CRUD operations
 export const systemConfigService = {
