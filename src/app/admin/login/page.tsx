@@ -47,7 +47,7 @@ export default function AdminLoginPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-[#F5F2ED] via-[#EBDACA] to-[#F5F2ED] flex items-center justify-center p-4">
+        <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50 flex items-center justify-center p-4">
             <div className="w-full max-w-md">
                 <h3 className="text-3xl font-bold text-center mb-6"> CHECK IN-OUT V.5</h3>
 
@@ -74,7 +74,7 @@ export default function AdminLoginPage() {
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent transition-all"
+                                    className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#059669]/20 focus:border-[#059669] transition-all"
                                     placeholder="admin@example.com"
                                     required
                                 />
@@ -93,7 +93,7 @@ export default function AdminLoginPage() {
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent transition-all"
+                                    className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#059669]/20 focus:border-[#059669] transition-all"
                                     placeholder="••••••••"
                                     required
                                 />
@@ -105,11 +105,11 @@ export default function AdminLoginPage() {
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                     type="checkbox"
-                                    className="w-4 h-4 rounded border-gray-300 text-[#000000] focus:ring-[#EBDACA]"
+                                    className="w-4 h-4 rounded border-gray-300 text-[#059669] focus:ring-[#059669]"
                                 />
                                 <span className="text-gray-600">จดจำฉันไว้</span>
                             </label>
-                            <a href="#" className="text-[#000000] hover:underline">
+                            <a href="#" className="text-[#059669] hover:underline hover:text-[#047857]">
                                 ลืมรหัสผ่าน?
                             </a>
                         </div>
@@ -118,7 +118,7 @@ export default function AdminLoginPage() {
                         <Button
                             type="submit"
                             disabled={loading}
-                            className="w-full h-12 bg-[#000000] hover:bg-[#000000]/90 text-white rounded-xl font-medium text-base shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full h-12 bg-[#059669] hover:bg-[#047857] text-white rounded-xl font-medium text-base shadow-lg shadow-[#059669]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? (
                                 <div className="flex items-center gap-2">

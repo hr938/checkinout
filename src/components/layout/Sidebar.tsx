@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -13,29 +14,77 @@ import {
     LogOut,
     Settings,
     Calculator,
-    Shield
+    Shield,
+    Timer,
+    ArrowLeftRight,
+    FileBarChart,
+    ClipboardList,
+    ChevronDown,
+    Database,
+    UserCog,
+    FileCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-
-const menuItems = [
-    { icon: Search, label: "ค้นหา", href: "/admin/search" },
-    { icon: Table, label: "ตารางข้อมูล", href: "/admin" },
-    { icon: Users, label: "พนักงาน", href: "/admin/employee" },
-    { icon: Shield, label: "ผู้ดูแลระบบ", href: "/admin/admins" },
-    { icon: FileText, label: "การลา", href: "/admin/leave" },
-    { icon: Clock, label: "ขอทำงานล่วงเวลา", href: "/admin/ot" },
-    { icon: BarChart2, label: "ภาพรวม", href: "/admin/analytics" },
-    { icon: Calculator, label: "เงินเดือน", href: "/admin/payroll" },
-];
-
 import { useAdmin } from "@/components/auth/AuthProvider";
+
+interface MenuItem {
+    icon: any;
+    label: string;
+    href: string;
+}
+
+interface MenuGroup {
+    title: string;
+    icon: any;
+    items: MenuItem[];
+}
+
+const menuGroups: MenuGroup[] = [
+    {
+        title: "ข้อมูล",
+        icon: Database,
+        items: [
+            { icon: Search, label: "ค้นหา", href: "/admin/search" },
+            { icon: Table, label: "ตารางข้อมูล", href: "/admin" },
+            { icon: ClipboardList, label: "สรุปรายวัน", href: "/admin/summary" },
+        ]
+    },
+    {
+        title: "จัดการ",
+        icon: UserCog,
+        items: [
+            { icon: Users, label: "พนักงาน", href: "/admin/employee" },
+            { icon: Shield, label: "ผู้ดูแลระบบ", href: "/admin/admins" },
+            { icon: Timer, label: "กะเวลาทำงาน", href: "/admin/shifts" },
+        ]
+    },
+    {
+        title: "คำขอ/อนุมัติ",
+        icon: FileCheck,
+        items: [
+            { icon: FileText, label: "การลา", href: "/admin/leave" },
+            { icon: Clock, label: "ขอทำงานล่วงเวลา", href: "/admin/ot" },
+            { icon: ArrowLeftRight, label: "สลับวันหยุด", href: "/admin/approvals/swap" },
+        ]
+    },
+    {
+        title: "รายงาน",
+        icon: BarChart2,
+        items: [
+            { icon: BarChart2, label: "ภาพรวม", href: "/admin/analytics" },
+            { icon: FileBarChart, label: "รายงานละเอียด", href: "/admin/reports" },
+            { icon: Calculator, label: "เงินเดือน", href: "/admin/payroll" },
+        ]
+    },
+];
 
 export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
     const pathname = usePathname();
     const router = useRouter();
     const { adminProfile } = useAdmin();
+    const [openGroups, setOpenGroups] = useState<string[]>(["ข้อมูล", "จัดการ", "คำขอ/อนุมัติ", "รายงาน"]);
 
     const handleLogout = async () => {
         try {
@@ -44,6 +93,18 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
         } catch (error) {
             console.error("Logout error:", error);
         }
+    };
+
+    const toggleGroup = (title: string) => {
+        setOpenGroups(prev =>
+            prev.includes(title)
+                ? prev.filter(g => g !== title)
+                : [...prev, title]
+        );
+    };
+
+    const isGroupActive = (group: MenuGroup) => {
+        return group.items.some(item => pathname === item.href);
     };
 
     return (
@@ -64,7 +125,6 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
                 <div className="p-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden relative">
-                            {/* Placeholder for user image */}
                             <div className="w-full h-full bg-emerald-600 flex items-center justify-center text-white font-bold">
                                 {adminProfile?.name?.charAt(0) || "A"}
                             </div>
@@ -85,25 +145,59 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
                     </Link>
                 </div>
 
-                {/* Menu Items */}
-                <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-                    {menuItems.map((item) => {
-                        const isActive = pathname === item.href;
+                {/* Menu Groups */}
+                <nav className="flex-1 px-3 py-2 overflow-y-auto">
+                    {menuGroups.map((group) => {
+                        const isOpen = openGroups.includes(group.title);
+                        const groupActive = isGroupActive(group);
+
                         return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                onClick={onClose}
-                                className={cn(
-                                    "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
-                                    isActive
-                                        ? "bg-white text-emerald-900 shadow-sm"
-                                        : "text-emerald-900/60 hover:bg-white/50 hover:text-emerald-900"
+                            <div key={group.title} className="mb-2">
+                                {/* Group Header */}
+                                <button
+                                    onClick={() => toggleGroup(group.title)}
+                                    className={cn(
+                                        "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                                        groupActive
+                                            ? "text-emerald-800 bg-white/30"
+                                            : "text-emerald-900/70 hover:bg-white/20"
+                                    )}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <group.icon className="w-4 h-4" />
+                                        <span>{group.title}</span>
+                                    </div>
+                                    <ChevronDown className={cn(
+                                        "w-4 h-4 transition-transform",
+                                        isOpen ? "rotate-180" : ""
+                                    )} />
+                                </button>
+
+                                {/* Group Items */}
+                                {isOpen && (
+                                    <div className="mt-1 ml-3 space-y-0.5">
+                                        {group.items.map((item) => {
+                                            const isActive = pathname === item.href;
+                                            return (
+                                                <Link
+                                                    key={item.href}
+                                                    href={item.href}
+                                                    onClick={onClose}
+                                                    className={cn(
+                                                        "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
+                                                        isActive
+                                                            ? "bg-white text-emerald-900 shadow-sm font-medium"
+                                                            : "text-emerald-900/60 hover:bg-white/50 hover:text-emerald-900"
+                                                    )}
+                                                >
+                                                    <item.icon className={cn("w-4 h-4", isActive ? "text-emerald-600" : "")} />
+                                                    {item.label}
+                                                </Link>
+                                            );
+                                        })}
+                                    </div>
                                 )}
-                            >
-                                <item.icon className={cn("w-5 h-5", isActive ? "text-emerald-600" : "text-emerald-900/60")} />
-                                {item.label}
-                            </Link>
+                            </div>
                         );
                     })}
                 </nav>

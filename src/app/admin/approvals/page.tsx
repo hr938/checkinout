@@ -6,12 +6,24 @@ import { leaveService, otService, type LeaveRequest, type OTRequest } from "@/li
 import { CheckCircle, XCircle, Clock, FileText, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
+import { CustomAlert } from "@/components/ui/custom-alert";
 
 export default function ApprovalsPage() {
     const [activeTab, setActiveTab] = useState<"leave" | "ot">("leave");
     const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
     const [otRequests, setOtRequests] = useState<OTRequest[]>([]);
     const [loading, setLoading] = useState(true);
+    const [alertState, setAlertState] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        type: "success" | "error" | "warning" | "info";
+    }>({
+        isOpen: false,
+        title: "",
+        message: "",
+        type: "info"
+    });
 
     const fetchData = async () => {
         setLoading(true);
@@ -42,7 +54,12 @@ export default function ApprovalsPage() {
             fetchData();
         } catch (error) {
             console.error(error);
-            alert("เกิดข้อผิดพลาด");
+            setAlertState({
+                isOpen: true,
+                title: "ผิดพลาด",
+                message: "เกิดข้อผิดพลาด",
+                type: "error"
+            });
         }
     };
 
@@ -53,7 +70,12 @@ export default function ApprovalsPage() {
             fetchData();
         } catch (error) {
             console.error(error);
-            alert("เกิดข้อผิดพลาด");
+            setAlertState({
+                isOpen: true,
+                title: "ผิดพลาด",
+                message: "เกิดข้อผิดพลาด",
+                type: "error"
+            });
         }
     };
 
@@ -64,7 +86,12 @@ export default function ApprovalsPage() {
             fetchData();
         } catch (error) {
             console.error(error);
-            alert("เกิดข้อผิดพลาด");
+            setAlertState({
+                isOpen: true,
+                title: "ผิดพลาด",
+                message: "เกิดข้อผิดพลาด",
+                type: "error"
+            });
         }
     };
 
@@ -75,7 +102,12 @@ export default function ApprovalsPage() {
             fetchData();
         } catch (error) {
             console.error(error);
-            alert("เกิดข้อผิดพลาด");
+            setAlertState({
+                isOpen: true,
+                title: "ผิดพลาด",
+                message: "เกิดข้อผิดพลาด",
+                type: "error"
+            });
         }
     };
 
@@ -91,8 +123,8 @@ export default function ApprovalsPage() {
                 <button
                     onClick={() => setActiveTab("leave")}
                     className={`pb-4 px-4 font-medium text-sm transition-colors relative ${activeTab === "leave"
-                            ? "text-blue-600"
-                            : "text-gray-500 hover:text-gray-700"
+                        ? "text-blue-600"
+                        : "text-gray-500 hover:text-gray-700"
                         }`}
                 >
                     คำขอลา ({leaveRequests.length})
@@ -103,8 +135,8 @@ export default function ApprovalsPage() {
                 <button
                     onClick={() => setActiveTab("ot")}
                     className={`pb-4 px-4 font-medium text-sm transition-colors relative ${activeTab === "ot"
-                            ? "text-blue-600"
-                            : "text-gray-500 hover:text-gray-700"
+                        ? "text-blue-600"
+                        : "text-gray-500 hover:text-gray-700"
                         }`}
                 >
                     คำขอ OT ({otRequests.length})
@@ -116,7 +148,10 @@ export default function ApprovalsPage() {
 
             {/* Content */}
             {loading ? (
-                <div className="text-center py-12 text-gray-500">กำลังโหลดข้อมูล...</div>
+                <div className="text-center py-12">
+                    <div className="w-12 h-12 border-4 border-gray-100 border-t-primary rounded-full animate-spin mx-auto"></div>
+                    <p className="text-gray-600 mt-4">กำลังโหลดข้อมูล...</p>
+                </div>
             ) : (
                 <div className="space-y-4">
                     {activeTab === "leave" ? (
@@ -132,8 +167,8 @@ export default function ApprovalsPage() {
                                             <div className="flex items-center gap-2">
                                                 <span className="font-bold text-gray-900">{req.employeeName}</span>
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${req.leaveType === "ลาป่วย" ? "bg-red-50 text-red-600" :
-                                                        req.leaveType === "ลากิจ" ? "bg-blue-50 text-blue-600" :
-                                                            "bg-purple-50 text-purple-600"
+                                                    req.leaveType === "ลากิจ" ? "bg-blue-50 text-blue-600" :
+                                                        "bg-purple-50 text-purple-600"
                                                     }`}>
                                                     {req.leaveType}
                                                 </span>
@@ -217,6 +252,14 @@ export default function ApprovalsPage() {
                     )}
                 </div>
             )}
+
+            <CustomAlert
+                isOpen={alertState.isOpen}
+                onClose={() => setAlertState(prev => ({ ...prev, isOpen: false }))}
+                title={alertState.title}
+                message={alertState.message}
+                type={alertState.type}
+            />
         </div>
     );
 }

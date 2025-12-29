@@ -129,6 +129,20 @@ const REQUIRED_QUERIES: {
                 where("email", "==", "__test__"),
                 limit(1)
             )
+        },
+        {
+            name: "Swap Requests by Employee",
+            collection: "swapRequests",
+            buildQuery: () => query(
+                collection(db, "swapRequests"),
+                where("employeeId", "==", "__test__"),
+                orderBy("createdAt", "desc"),
+                limit(1)
+            ),
+            fields: [
+                { fieldPath: "employeeId", order: "ASCENDING" },
+                { fieldPath: "createdAt", order: "DESCENDING" }
+            ]
         }
     ];
 

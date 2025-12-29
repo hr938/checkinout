@@ -41,7 +41,7 @@ import { th } from "date-fns/locale";
 import { isLate, getLateMinutes, formatMinutesToHours } from "@/lib/workTime";
 import { Users, UserCheck, Clock, CalendarOff, Download, Filter, CheckSquare, Square, X, FileSpreadsheet, Calendar } from "lucide-react";
 
-const COLORS = ["#EBDACA", "#A8999E", "#553734", "#D4C5C7", "#8D7B7F"];
+const COLORS = ["#059669", "#10B981", "#34D399", "#6EE7B7", "#C6F6D5"];
 const LEAVE_COLORS = ["#FF8042", "#00C49F", "#FFBB28", "#0088FE"];
 
 export function AnalyticsCharts() {
@@ -588,7 +588,7 @@ export function AnalyticsCharts() {
                             <Download className="w-4 h-4" />
                             Export CSV
                         </Button>
-                        <Button onClick={() => setShowRawExportModal(true)} className="gap-2 flex-1 md:flex-none rounded-full bg-green-600 hover:bg-green-700 text-white">
+                        <Button onClick={() => setShowRawExportModal(true)} className="gap-2 flex-1 md:flex-none rounded-full bg-primary-dark hover:bg-primary-dark text-white">
                             <FileSpreadsheet className="w-4 h-4" />
                             Export ข้อมูลดิบ
                         </Button>
@@ -617,7 +617,7 @@ export function AnalyticsCharts() {
                             <div className="flex gap-2 mb-4">
                                 <button
                                     onClick={() => selectAllExportOptions(true)}
-                                    className="flex-1 py-2 px-3 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+                                    className="flex-1 py-2 px-3 bg-green-50 text-primary rounded-lg text-sm font-medium hover:bg-green-100 transition-colors"
                                 >
                                     เลือกทั้งหมด
                                 </button>
@@ -636,7 +636,7 @@ export function AnalyticsCharts() {
                                     className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-left"
                                 >
                                     {exportOptions.summary ? (
-                                        <CheckSquare className="w-5 h-5 text-blue-600" />
+                                        <CheckSquare className="w-5 h-5 text-primary" />
                                     ) : (
                                         <Square className="w-5 h-5 text-gray-400" />
                                     )}
@@ -651,7 +651,7 @@ export function AnalyticsCharts() {
                                     className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-left"
                                 >
                                     {exportOptions.attendance ? (
-                                        <CheckSquare className="w-5 h-5 text-blue-600" />
+                                        <CheckSquare className="w-5 h-5 text-primary" />
                                     ) : (
                                         <Square className="w-5 h-5 text-gray-400" />
                                     )}
@@ -666,7 +666,7 @@ export function AnalyticsCharts() {
                                     className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-left"
                                 >
                                     {exportOptions.lateList ? (
-                                        <CheckSquare className="w-5 h-5 text-blue-600" />
+                                        <CheckSquare className="w-5 h-5 text-primary" />
                                     ) : (
                                         <Square className="w-5 h-5 text-gray-400" />
                                     )}
@@ -681,7 +681,7 @@ export function AnalyticsCharts() {
                                     className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-left"
                                 >
                                     {exportOptions.leaveData ? (
-                                        <CheckSquare className="w-5 h-5 text-blue-600" />
+                                        <CheckSquare className="w-5 h-5 text-primary" />
                                     ) : (
                                         <Square className="w-5 h-5 text-gray-400" />
                                     )}
@@ -696,7 +696,7 @@ export function AnalyticsCharts() {
                                     className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-left"
                                 >
                                     {exportOptions.otData ? (
-                                        <CheckSquare className="w-5 h-5 text-blue-600" />
+                                        <CheckSquare className="w-5 h-5 text-primary" />
                                     ) : (
                                         <Square className="w-5 h-5 text-gray-400" />
                                     )}
@@ -716,14 +716,14 @@ export function AnalyticsCharts() {
                                     setShowExportModal(false);
                                     setShowRawExportModal(true);
                                 }}
-                                className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-green-500 bg-green-50 hover:bg-green-100 transition-colors text-left"
+                                className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-primary/20 bg-green-50 hover:bg-green-100 transition-colors text-left"
                             >
-                                <FileSpreadsheet className="w-6 h-6 text-green-600" />
+                                <FileSpreadsheet className="w-6 h-6 text-primary" />
                                 <div className="flex-1">
                                     <p className="font-semibold text-gray-800"> Export ข้อมูลดิบแบบละเอียด</p>
                                     <p className="text-xs text-gray-500">ชื่อ, Status, วันที่, เข้า/ออก, สถานที่, พิกัด, หมายเหตุ (เลือกช่วงเวลาได้)</p>
                                 </div>
-                                <span className="px-2 py-1 bg-green-600 text-white text-xs font-medium rounded">เปิด</span>
+                                <span className="px-2 py-1 bg-primary text-white text-xs font-medium rounded">เปิด</span>
                             </button>
                         </div>
 
@@ -738,7 +738,7 @@ export function AnalyticsCharts() {
                             <Button
                                 onClick={handleExport}
                                 disabled={!Object.values(exportOptions).some(v => v)}
-                                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                                className="flex-1 bg-primary hover:bg-primary-dark text-white gap-2"
                             >
                                 <Download className="w-4 h-4" />
                                 ดาวน์โหลด CSV
@@ -755,8 +755,8 @@ export function AnalyticsCharts() {
                         <div className="p-6 border-b border-gray-100">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-green-100 rounded-xl">
-                                        <FileSpreadsheet className="w-6 h-6 text-green-600" />
+                                    <div className="p-2 bg-green-50 rounded-xl">
+                                        <FileSpreadsheet className="w-6 h-6 text-primary" />
                                     </div>
                                     <div>
                                         <h3 className="text-xl font-bold text-gray-800">Export ข้อมูลดิบ</h3>
@@ -788,7 +788,7 @@ export function AnalyticsCharts() {
                                             key={opt.value}
                                             onClick={() => handleRawExportDateTypeChange(opt.value as typeof rawExportDateType)}
                                             className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${rawExportDateType === opt.value
-                                                ? 'bg-green-600 text-white'
+                                                ? 'bg-primary text-white'
                                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                                 }`}
                                         >

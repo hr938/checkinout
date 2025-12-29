@@ -3,13 +3,14 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Save, Clock, AlertCircle, CheckCircle2, DollarSign, HardDrive, Calendar, Plus, Trash2, MapPin, Crosshair, Database, ExternalLink, RefreshCw, Copy, FileJson, Briefcase } from "lucide-react";
+import { Save, Clock, AlertCircle, CheckCircle2, DollarSign, HardDrive, Calendar, Plus, Trash2, MapPin, Crosshair, Database, ExternalLink, RefreshCw, Copy, FileJson, Briefcase, ArrowLeftRight } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { WORK_TIME_CONFIG } from "@/lib/workTime";
 import { systemConfigService, type SystemConfig, employeeService } from "@/lib/firestore";
 import { getStorageUsage, deleteOldPhotos, type StorageStats, PHOTO_STORAGE_LIMIT } from "@/lib/storage";
 import { checkAllIndexes, type IndexCheckResult } from "@/lib/indexChecker";
+import { CustomAlert } from "@/components/ui/custom-alert";
 
 export default function SettingsPage() {
     const [settings, setSettings] = useState<SystemConfig>({
@@ -35,7 +36,8 @@ export default function SettingsPage() {
             latitude: 0,
             longitude: 0,
             radius: 100
-        }
+        },
+        swapAdvanceDays: 3
     });
 
     const [newHoliday, setNewHoliday] = useState({
@@ -63,6 +65,17 @@ export default function SettingsPage() {
     // Index Checker State
     const [indexResults, setIndexResults] = useState<IndexCheckResult[]>([]);
     const [checkingIndexes, setCheckingIndexes] = useState(false);
+    const [alertState, setAlertState] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        type: "success" | "error" | "warning" | "info";
+    }>({
+        isOpen: false,
+        title: "",
+        message: "",
+        type: "info"
+    });
     const [showIndexModal, setShowIndexModal] = useState(false);
 
     const [departments, setDepartments] = useState<string[]>([]);
@@ -128,7 +141,8 @@ export default function SettingsPage() {
                             latitude: 0,
                             longitude: 0,
                             radius: 100
-                        }
+                        },
+                        swapAdvanceDays: config.swapAdvanceDays ?? 3
                     });
                 }
             } catch (error) {
@@ -191,14 +205,24 @@ export default function SettingsPage() {
         setCleanupLoading(true);
         try {
             const result = await deleteOldPhotos(months);
-            alert(`ลบรูปภาพเรียบร้อยแล้ว ${result.deletedCount} รูป (${(result.freedBytes / (1024 * 1024)).toFixed(2)} MB)`);
+            setAlertState({
+                isOpen: true,
+                title: "สำเร็จ",
+                message: `ลบรูปภาพเรียบร้อยแล้ว ${result.deletedCount} รูป (${(result.freedBytes / (1024 * 1024)).toFixed(2)} MB)`,
+                type: "success"
+            });
 
             // Refresh storage usage
             const usage = await getStorageUsage();
             setStorageUsage(usage);
         } catch (error) {
             console.error("Error cleaning up:", error);
-            alert("เกิดข้อผิดพลาดในการลบรูปภาพ");
+            setAlertState({
+                isOpen: true,
+                title: "ผิดพลาด",
+                message: "เกิดข้อผิดพลาดในการลบรูปภาพ",
+                type: "error"
+            });
         } finally {
             setCleanupLoading(false);
         }
@@ -221,13 +245,23 @@ export default function SettingsPage() {
                 },
                 (error) => {
                     console.error("Error getting location:", error);
-                    alert("ไม่สามารถดึงตำแหน่งปัจจุบันได้ กรุณาตรวจสอบการอนุญาตเข้าถึงตำแหน่ง");
+                    setAlertState({
+                        isOpen: true,
+                        title: "ผิดพลาด",
+                        message: "ไม่สามารถดึงตำแหน่งปัจจุบันได้ กรุณาตรวจสอบการอนุญาตเข้าถึงตำแหน่ง",
+                        type: "error"
+                    });
                     setGettingLocation(false);
                 },
                 { enableHighAccuracy: true }
             );
         } else {
-            alert("เบราว์เซอร์ของคุณไม่รองรับการระบุตำแหน่ง");
+            setAlertState({
+                isOpen: true,
+                title: "ผิดพลาด",
+                message: "เบราว์เซอร์ของคุณไม่รองรับการระบุตำแหน่ง",
+                type: "error"
+            });
             setGettingLocation(false);
         }
     };
@@ -243,7 +277,12 @@ export default function SettingsPage() {
             setTimeout(() => setSaved(false), 3000);
         } catch (error) {
             console.error("Error saving settings:", error);
-            alert("เกิดข้อผิดพลาดในการบันทึกการตั้งค่า");
+            setAlertState({
+                isOpen: true,
+                title: "ผิดพลาด",
+                message: "เกิดข้อผิดพลาดในการบันทึกการตั้งค่า",
+                type: "error"
+            });
         } finally {
             setLoading(false);
         }
@@ -271,7 +310,8 @@ export default function SettingsPage() {
                 latitude: 0,
                 longitude: 0,
                 radius: 100
-            }
+            },
+            swapAdvanceDays: 3
         });
     };
 
@@ -283,7 +323,7 @@ export default function SettingsPage() {
                     subtitle="จัดการการตั้งค่าเวลาทำงานและนโยบายต่างๆ"
                 />
                 <div className="flex justify-center items-center h-64">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <div className="w-12 h-12 border-4 border-gray-100 border-t-primary rounded-full animate-spin mx-auto"></div>
                 </div>
             </div>
         );
@@ -703,160 +743,6 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                {/* Department Schedule Settings (Multi-select) */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
-                            <Briefcase className="w-5 h-5 text-orange-600" />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-gray-800">เวลาทำงานตามแผนก</h2>
-                            <p className="text-sm text-gray-500">กำหนดเวลาเข้า-ออกงานตามแผนก (เลือกหลายแผนกได้)</p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* Department List */}
-                        <div className="md:col-span-1 border border-gray-200 rounded-xl overflow-hidden flex flex-col max-h-[400px]">
-                            <div className="bg-gray-50 p-3 border-b border-gray-200 font-medium text-gray-700 flex justify-between items-center">
-                                <span>เลือกแผนก ({selectedDepartmentsBulk.length})</span>
-                                <button
-                                    onClick={() => setSelectedDepartmentsBulk(selectedDepartmentsBulk.length === departments.length ? [] : departments)}
-                                    className="text-xs text-blue-600 hover:text-blue-800"
-                                >
-                                    {selectedDepartmentsBulk.length === departments.length ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
-                                </button>
-                            </div>
-                            <div className="overflow-y-auto p-2 space-y-1">
-                                {departments.map(dept => {
-                                    const config = settings.departmentWorkTimes?.[dept];
-                                    const hasConfig = !!config;
-                                    return (
-                                        <label key={dept} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-gray-50 ${selectedDepartmentsBulk.includes(dept) ? 'bg-blue-50' : ''}`}>
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedDepartmentsBulk.includes(dept)}
-                                                onChange={() => {
-                                                    if (selectedDepartmentsBulk.includes(dept)) {
-                                                        setSelectedDepartmentsBulk(selectedDepartmentsBulk.filter(d => d !== dept));
-                                                    } else {
-                                                        setSelectedDepartmentsBulk([...selectedDepartmentsBulk, dept]);
-                                                    }
-                                                }}
-                                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-sm font-medium text-gray-900 truncate">{dept}</div>
-                                                {hasConfig && (
-                                                    <div className="text-xs text-blue-600">
-                                                        {String(config.checkInHour).padStart(2, '0')}:{String(config.checkInMinute).padStart(2, '0')} - {String(config.checkOutHour).padStart(2, '0')}:{String(config.checkOutMinute).padStart(2, '0')}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </label>
-                                    )
-                                })}
-                                {departments.length === 0 && <p className="text-sm text-gray-500 p-2 text-center">ไม่พบข้อมูลแผนก</p>}
-                            </div>
-                        </div>
-
-                        {/* Configuration Panel */}
-                        <div className="md:col-span-2 space-y-4">
-                            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                <h3 className="font-medium text-gray-800 mb-4">กำหนดเวลาสำหรับแผนกที่เลือก</h3>
-
-                                <div className="grid grid-cols-2 gap-4 mb-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">เวลาเข้างาน</label>
-                                        <div className="flex gap-2">
-                                            <select
-                                                value={bulkTimeConfig.checkInHour}
-                                                onChange={(e) => setBulkTimeConfig({ ...bulkTimeConfig, checkInHour: parseInt(e.target.value) })}
-                                                className="flex-1 px-2 py-1.5 border rounded-lg text-sm"
-                                            >
-                                                {Array.from({ length: 24 }).map((_, i) => <option key={i} value={i}>{i.toString().padStart(2, '0')}</option>)}
-                                            </select>
-                                            <span className="self-center">:</span>
-                                            <select
-                                                value={bulkTimeConfig.checkInMinute}
-                                                onChange={(e) => setBulkTimeConfig({ ...bulkTimeConfig, checkInMinute: parseInt(e.target.value) })}
-                                                className="flex-1 px-2 py-1.5 border rounded-lg text-sm"
-                                            >
-                                                {[0, 15, 30, 45].map(m => <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">เวลาออกงาน</label>
-                                        <div className="flex gap-2">
-                                            <select
-                                                value={bulkTimeConfig.checkOutHour}
-                                                onChange={(e) => setBulkTimeConfig({ ...bulkTimeConfig, checkOutHour: parseInt(e.target.value) })}
-                                                className="flex-1 px-2 py-1.5 border rounded-lg text-sm"
-                                            >
-                                                {Array.from({ length: 24 }).map((_, i) => <option key={i} value={i}>{i.toString().padStart(2, '0')}</option>)}
-                                            </select>
-                                            <span className="self-center">:</span>
-                                            <select
-                                                value={bulkTimeConfig.checkOutMinute}
-                                                onChange={(e) => setBulkTimeConfig({ ...bulkTimeConfig, checkOutMinute: parseInt(e.target.value) })}
-                                                className="flex-1 px-2 py-1.5 border rounded-lg text-sm"
-                                            >
-                                                {[0, 15, 30, 45].map(m => <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-3">
-                                    <Button
-                                        onClick={() => {
-                                            if (selectedDepartmentsBulk.length === 0) return alert("กรุณาเลือกแผนกอย่างน้อย 1 รายการ");
-                                            const newDeptTimes = { ...(settings.departmentWorkTimes || {}) };
-                                            selectedDepartmentsBulk.forEach(dept => {
-                                                newDeptTimes[dept] = { ...bulkTimeConfig };
-                                            });
-                                            setSettings({ ...settings, departmentWorkTimes: newDeptTimes });
-                                            setSelectedDepartmentsBulk([]);
-                                            alert(`บันทึกการตั้งค่าสำหรับ ${selectedDepartmentsBulk.length} แผนกเรียบร้อยแล้ว`);
-                                        }}
-                                        disabled={selectedDepartmentsBulk.length === 0}
-                                        className="flex-1 gap-2"
-                                    >
-                                        <Save className="w-4 h-4" />
-                                        บันทึกค่า ({selectedDepartmentsBulk.length})
-                                    </Button>
-                                    <Button
-                                        onClick={() => {
-                                            if (selectedDepartmentsBulk.length === 0) return alert("กรุณาเลือกแผนกอย่างน้อย 1 รายการ");
-                                            const newDeptTimes = { ...(settings.departmentWorkTimes || {}) };
-                                            let count = 0;
-                                            selectedDepartmentsBulk.forEach(dept => {
-                                                if (newDeptTimes[dept]) {
-                                                    delete newDeptTimes[dept];
-                                                    count++;
-                                                }
-                                            });
-                                            setSettings({ ...settings, departmentWorkTimes: newDeptTimes });
-                                            setSelectedDepartmentsBulk([]);
-                                            alert(`ลบการตั้งค่าสำหรับ ${count} แผนกเรียบร้อยแล้ว`);
-                                        }}
-                                        variant="outline"
-                                        disabled={selectedDepartmentsBulk.length === 0}
-                                        className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
-                                    >
-                                        ล้างค่าที่ตั้งไว้
-                                    </Button>
-                                </div>
-                            </div>
-                            <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                                💡 เลือกหลายแผนกเพื่อกำหนดเวลาเดียวกัน หรือแก้ไข/ลบค่าเดิม
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-
 
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
                     <div className="flex items-center gap-3 mb-6">
@@ -908,6 +794,39 @@ export default function SettingsPage() {
                             />
                             <p className="text-xs text-gray-500 mt-2">
                                 ต้องทำงานเกินเวลาอย่างน้อย {settings.minOTMinutes} นาที จึงจะนับเป็นโอที
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Swap Holiday Policy */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                            <ArrowLeftRight className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-800">นโยบายสลับวันหยุด</h2>
+                            <p className="text-sm text-gray-500">กำหนดเงื่อนไขการขอสลับวันหยุด</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                ต้องขอสลับล่วงหน้าอย่างน้อย (วัน)
+                            </label>
+                            <input
+                                type="number"
+                                min="0"
+                                max="30"
+                                value={settings.swapAdvanceDays ?? 3}
+                                onChange={(e) => setSettings({ ...settings, swapAdvanceDays: parseInt(e.target.value) || 0 })}
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="3"
+                            />
+                            <p className="text-xs text-gray-500 mt-2">
+                                หากตั้งเป็น 0 คือสามารถขอสลับวันไหนก็ได้ (ไม่แนะนำ)
                             </p>
                         </div>
                     </div>
@@ -1240,7 +1159,12 @@ export default function SettingsPage() {
                                     setShowIndexModal(true);
                                 } catch (error) {
                                     console.error("Error checking indexes:", error);
-                                    alert("เกิดข้อผิดพลาดในการตรวจสอบ Indexes");
+                                    setAlertState({
+                                        isOpen: true,
+                                        title: "ผิดพลาด",
+                                        message: "เกิดข้อผิดพลาดในการตรวจสอบ Indexes",
+                                        type: "error"
+                                    });
                                 } finally {
                                     setCheckingIndexes(false);
                                 }
@@ -1350,7 +1274,12 @@ export default function SettingsPage() {
                                                             fieldOverrides: []
                                                         }, null, 2);
                                                         navigator.clipboard.writeText(json);
-                                                        alert("คัดลอก JSON แล้ว!");
+                                                        setAlertState({
+                                                            isOpen: true,
+                                                            title: "สำเร็จ",
+                                                            message: "คัดลอก JSON แล้ว!",
+                                                            type: "success"
+                                                        });
                                                     }}
                                                     className="text-xs hover:bg-gray-800 text-gray-300 h-8 gap-1"
                                                 >
@@ -1435,6 +1364,14 @@ export default function SettingsPage() {
                     </Button>
                 </div>
             </div>
+
+            <CustomAlert
+                isOpen={alertState.isOpen}
+                onClose={() => setAlertState(prev => ({ ...prev, isOpen: false }))}
+                title={alertState.title}
+                message={alertState.message}
+                type={alertState.type}
+            />
         </div>
     );
 }

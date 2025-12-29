@@ -37,6 +37,8 @@ export interface Employee {
     avatar?: string | null;
     lineUserId?: string;
     baseSalary?: number;
+    weeklyHolidays?: number[]; // วันหยุดประจำสัปดาห์ (0=อาทิตย์, 1=จันทร์, ..., 6=เสาร์)
+    shiftId?: string;           // ID ของกะเวลาทำงาน
 }
 
 // Attendance types
@@ -45,15 +47,16 @@ export interface Attendance {
     employeeId: string;
     employeeName: string;
     date: Date;
-    checkIn?: Date;
-    checkOut?: Date;
-    status: "เข้างาน" | "ออกงาน" | "ลางาน" | "สาย" | "ระหว่างวัน";
+    checkIn?: Date | null;
+    checkOut?: Date | null;
+    status: "เข้างาน" | "ออกงาน" | "ลางาน" | "สาย" | "ก่อนพัก" | "หลังพัก" | "ออกนอกพื้นที่ขาไป" | "ออกนอกพื้นที่ขากลับ";
     location?: string;
     photo?: string;
     latitude?: number;
     longitude?: number;
     locationNote?: string;
     distance?: number; // Distance from workplace in meters
+    lateMinutes?: number; // จำนวนนาทีที่สาย
 }
 
 // Leave Request types
@@ -67,6 +70,7 @@ export interface LeaveRequest {
     reason: string;
     status: "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ";
     createdAt: Date;
+    attachment?: string; // รูปภาพหลักฐาน (Base64)
 }
 
 // OT Request types
@@ -79,6 +83,31 @@ export interface OTRequest {
     endTime: Date;
     reason: string;
     status: "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ";
+    createdAt: Date;
+}
+
+// Swap Holiday Request types (ขอสลับวันหยุด)
+export interface SwapRequest {
+    id?: string;
+    employeeId: string;
+    employeeName: string;
+    workDate: Date;      // วันหยุดปกติที่ขอมาทำงาน
+    holidayDate: Date;   // วันทำงานปกติที่ขอหยุดแทน
+    reason: string;
+    status: "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ";
+    createdAt: Date;
+}
+
+// Work Shift types (กะเวลาทำงาน)
+export interface Shift {
+    id?: string;
+    name: string;                  // ชื่อกะ เช่น "กะเช้า", "กะบ่าย", "กะดึก"
+    checkInHour: number;           // ชั่วโมงเข้างาน (0-23)
+    checkInMinute: number;         // นาทีเข้างาน (0-59)
+    checkOutHour: number;          // ชั่วโมงออกงาน (0-23)
+    checkOutMinute: number;        // นาทีออกงาน (0-59)
+    lateGracePeriod?: number;      // นาทีผ่อนผันสาย (default: 0)
+    isDefault?: boolean;           // กะหลัก (default shift)
     createdAt: Date;
 }
 
@@ -145,7 +174,12 @@ export const employeeService = {
             data.endDate = null;
         }
 
-        // Remove undefined fields
+        // Handle shiftId - if undefined, set to null to clear it in DB
+        if ('shiftId' in employee && (employee.shiftId === undefined || employee.shiftId === null)) {
+            data.shiftId = null;
+        }
+
+        // Remove undefined fields (except those we explicitly set to null above)
         Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
 
         await updateDoc(docRef, data);
@@ -485,7 +519,118 @@ export const otService = {
     },
 };
 
-// System Config types
+// Swap Holiday Request CRUD operations
+export const swapService = {
+    async create(swap: Omit<SwapRequest, "id">) {
+        const docRef = await addDoc(collection(db, "swapRequests"), {
+            ...swap,
+            workDate: Timestamp.fromDate(swap.workDate),
+            holidayDate: Timestamp.fromDate(swap.holidayDate),
+            createdAt: Timestamp.fromDate(swap.createdAt),
+        });
+        return docRef.id;
+    },
+
+    async getAll() {
+        const q = query(collection(db, "swapRequests"), orderBy("createdAt", "desc"));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            workDate: doc.data().workDate?.toDate(),
+            holidayDate: doc.data().holidayDate?.toDate(),
+            createdAt: doc.data().createdAt?.toDate(),
+        })) as SwapRequest[];
+    },
+
+    async getByEmployeeId(employeeId: string) {
+        const q = query(
+            collection(db, "swapRequests"),
+            where("employeeId", "==", employeeId),
+            orderBy("createdAt", "desc")
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            workDate: doc.data().workDate?.toDate(),
+            holidayDate: doc.data().holidayDate?.toDate(),
+            createdAt: doc.data().createdAt?.toDate(),
+        })) as SwapRequest[];
+    },
+
+    async updateStatus(id: string, status: SwapRequest["status"]) {
+        const docRef = doc(db, "swapRequests", id);
+        await updateDoc(docRef, { status });
+    },
+
+    async delete(id: string) {
+        await deleteDoc(doc(db, "swapRequests", id));
+    },
+};
+
+// Shift CRUD operations (กะเวลาทำงาน)
+export const shiftService = {
+    async create(shift: Omit<Shift, "id">) {
+        const docRef = await addDoc(collection(db, "shifts"), {
+            ...shift,
+            createdAt: Timestamp.fromDate(shift.createdAt),
+        });
+        return docRef.id;
+    },
+
+    async getAll() {
+        const q = query(collection(db, "shifts"), orderBy("checkInHour", "asc"));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate(),
+        })) as Shift[];
+    },
+
+    async getById(id: string) {
+        const docSnap = await getDoc(doc(db, "shifts", id));
+        if (docSnap.exists()) {
+            return {
+                id: docSnap.id,
+                ...docSnap.data(),
+                createdAt: docSnap.data().createdAt?.toDate(),
+            } as Shift;
+        }
+        return null;
+    },
+
+    async update(id: string, shift: Partial<Omit<Shift, "id">>) {
+        const docRef = doc(db, "shifts", id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data: any = { ...shift };
+        if (shift.createdAt) {
+            data.createdAt = Timestamp.fromDate(shift.createdAt);
+        }
+        Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
+        await updateDoc(docRef, data);
+    },
+
+    async delete(id: string) {
+        await deleteDoc(doc(db, "shifts", id));
+    },
+
+    async getDefault() {
+        const q = query(collection(db, "shifts"), where("isDefault", "==", true));
+        const querySnapshot = await getDocs(q);
+        if (querySnapshot.docs.length > 0) {
+            const doc = querySnapshot.docs[0];
+            return {
+                id: doc.id,
+                ...doc.data(),
+                createdAt: doc.data().createdAt?.toDate(),
+            } as Shift;
+        }
+        return null;
+    },
+};
+
 export interface CustomHoliday {
     date: Date;
     name: string;
@@ -522,22 +667,10 @@ export interface SystemConfig {
     adminLineGroupId?: string; // Line Group ID for admin notifications
     enableDailyReport?: boolean; // Enable daily summary report
     allowNewRegistration?: boolean; // Allow new employee registration
-    // Department Specific Work Times
-    departmentWorkTimes?: Record<string, {
-        checkInHour: number;
-        checkInMinute: number;
-        checkOutHour: number;
-        checkOutMinute: number;
-        lateGracePeriod?: number; // Override grace period (optional)
-    }>;
-    // Position Specific Work Times
-    positionWorkTimes?: Record<string, {
-        checkInHour: number;
-        checkInMinute: number;
-        checkOutHour: number;
-        checkOutMinute: number;
-        lateGracePeriod?: number; // Override grace period (optional)
-    }>;
+    // Retroactive request limits (จำนวนวันย้อนหลัง)
+    otRetroactiveDays?: number;      // วันย้อนหลังที่อนุญาตให้ขอ OT (default: 7)
+    leaveRetroactiveDays?: number;   // วันย้อนหลังที่อนุญาตให้แนบหลักฐานลา (default: 7)
+    swapAdvanceDays?: number;        // วันล่วงหน้าที่ต้องขอสลับวันหยุด (default: 3)
 }
 // System Config CRUD operations
 export const systemConfigService = {

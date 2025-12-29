@@ -364,14 +364,10 @@ export default function PayrollPage() {
             for (const emp of targetEmployees) {
                 if (!emp.id) continue;
 
-                // Determine Work Time Config for this employee
-                // Priority: Department > Global
-                const deptOverride = emp.department && config?.departmentWorkTimes ? config.departmentWorkTimes[emp.department] : undefined;
-
                 const checkInConfig = {
-                    hour: deptOverride?.checkInHour ?? config?.checkInHour ?? 9,
-                    minute: deptOverride?.checkInMinute ?? config?.checkInMinute ?? 0,
-                    gracePeriod: deptOverride?.lateGracePeriod ?? config?.lateGracePeriod ?? 0
+                    hour: config?.checkInHour ?? 9,
+                    minute: config?.checkInMinute ?? 0,
+                    gracePeriod: config?.lateGracePeriod ?? 0
                 };
 
                 // Fetch Attendance & OT

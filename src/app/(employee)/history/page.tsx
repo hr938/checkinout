@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { attendanceService, leaveService, otService } from "@/lib/firestore";
-import { Attendance, LeaveRequest, OTRequest } from "@/lib/firestore";
+import { attendanceService, leaveService, otService, swapService } from "@/lib/firestore";
+import { Attendance, LeaveRequest, OTRequest, SwapRequest } from "@/lib/firestore";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { EmployeeHeader } from "@/components/mobile/EmployeeHeader";
@@ -11,11 +11,12 @@ import { Calendar, Clock, MapPin, FileText, Clock as ClockIcon } from "lucide-re
 
 export default function HistoryPage() {
     const { employee } = useEmployee();
-    const [activeTab, setActiveTab] = useState<"attendance" | "leave" | "ot">("attendance");
+    const [activeTab, setActiveTab] = useState<"attendance" | "leave" | "ot" | "swap">("attendance");
 
     const [attendance, setAttendance] = useState<Attendance[]>([]);
     const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
     const [ots, setOts] = useState<OTRequest[]>([]);
+    const [swaps, setSwaps] = useState<SwapRequest[]>([]);
 
     const [loading, setLoading] = useState(true);
 
@@ -24,15 +25,17 @@ export default function HistoryPage() {
             if (!employee?.id) return;
             setLoading(true);
             try {
-                const [attendanceData, leaveData, otData] = await Promise.all([
+                const [attendanceData, leaveData, otData, swapData] = await Promise.all([
                     attendanceService.getHistory(employee.id),
                     leaveService.getByEmployeeId(employee.id),
-                    otService.getByEmployeeId(employee.id)
+                    otService.getByEmployeeId(employee.id),
+                    swapService.getByEmployeeId(employee.id)
                 ]);
 
                 setAttendance(attendanceData);
                 setLeaves(leaveData);
                 setOts(otData);
+                setSwaps(swapData);
             } catch (error) {
                 console.error("Error fetching history:", error);
             } finally {
@@ -74,8 +77,8 @@ export default function HistoryPage() {
                     <button
                         onClick={() => setActiveTab("attendance")}
                         className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === "attendance"
-                                ? "bg-[#0047BA] text-white shadow-md"
-                                : "text-gray-500 hover:bg-gray-50"
+                            ? "bg-primary-dark text-white shadow-md"
+                            : "text-gray-500 hover:bg-gray-50"
                             }`}
                     >
                         ลงเวลา
@@ -83,8 +86,8 @@ export default function HistoryPage() {
                     <button
                         onClick={() => setActiveTab("leave")}
                         className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === "leave"
-                                ? "bg-[#0047BA] text-white shadow-md"
-                                : "text-gray-500 hover:bg-gray-50"
+                            ? "bg-primary-dark text-white shadow-md"
+                            : "text-gray-500 hover:bg-gray-50"
                             }`}
                     >
                         การลา
@@ -92,11 +95,20 @@ export default function HistoryPage() {
                     <button
                         onClick={() => setActiveTab("ot")}
                         className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === "ot"
-                                ? "bg-[#0047BA] text-white shadow-md"
-                                : "text-gray-500 hover:bg-gray-50"
+                            ? "bg-primary-dark text-white shadow-md"
+                            : "text-gray-500 hover:bg-gray-50"
                             }`}
                     >
                         โอที
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("swap")}
+                        className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === "swap"
+                            ? "bg-primary-dark text-white shadow-md"
+                            : "text-gray-500 hover:bg-gray-50"
+                            }`}
+                    >
+                        สลับวัน
                     </button>
                 </div>
 
@@ -105,10 +117,12 @@ export default function HistoryPage() {
                         {activeTab === "attendance" && <Calendar className="w-5 h-5 text-orange-500" />}
                         {activeTab === "leave" && <FileText className="w-5 h-5 text-blue-500" />}
                         {activeTab === "ot" && <ClockIcon className="w-5 h-5 text-purple-500" />}
+                        {activeTab === "swap" && <ClockIcon className="w-5 h-5 text-teal-500" />}
 
                         {activeTab === "attendance" && "ประวัติการลงเวลา"}
                         {activeTab === "leave" && "ประวัติการลา"}
                         {activeTab === "ot" && "ประวัติการขอโอที"}
+                        {activeTab === "swap" && "ประวัติการสลับวันหยุด"}
                     </h2>
 
                     {loading ? (
@@ -131,13 +145,13 @@ export default function HistoryPage() {
                                             className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden"
                                         >
                                             <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${record.status === 'เข้างาน' ? 'bg-green-500' :
-                                                    record.status === 'ออกงาน' ? 'bg-red-500' : 'bg-orange-500'
+                                                record.status === 'ออกงาน' ? 'bg-red-500' : 'bg-orange-500'
                                                 }`} />
 
                                             <div className="flex justify-between items-start mb-2 pl-2">
                                                 <div>
                                                     <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold mb-1 ${record.status === 'เข้างาน' ? 'bg-green-100 text-green-700' :
-                                                            record.status === 'ออกงาน' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                                                        record.status === 'ออกงาน' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
                                                         }`}>
                                                         {record.status}
                                                     </span>
@@ -239,6 +253,63 @@ export default function HistoryPage() {
                                             {ot.reason && (
                                                 <div className="text-xs text-gray-500 pl-2 mt-2 pt-2 border-t border-gray-50">
                                                     เหตุผล: {ot.reason}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                )
+                            )}
+
+                            {/* Swap List */}
+                            {activeTab === "swap" && (
+                                swaps.length === 0 ? (
+                                    <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                                        ไม่พบประวัติการสลับวันหยุด
+                                    </div>
+                                ) : (
+                                    swaps.map((swap) => (
+                                        <div
+                                            key={swap.id}
+                                            className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden"
+                                        >
+                                            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${getStatusBorder(swap.status)}`} />
+
+                                            <div className="flex justify-between items-start mb-2 pl-2">
+                                                <div>
+                                                    <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold mb-1 ${getStatusColor(swap.status)}`}>
+                                                        {swap.status}
+                                                    </span>
+                                                    <div className="text-sm font-bold text-gray-900">
+                                                        ขอสลับวันหยุด
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-xs text-gray-500 mb-1">วันที่ยื่น</div>
+                                                    <div className="text-sm font-medium text-gray-800">
+                                                        {swap.createdAt ? format(swap.createdAt instanceof Date ? swap.createdAt : (swap.createdAt as any).toDate(), "d MMM", { locale: th }) : "-"}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 mt-2 pl-2 text-sm">
+                                                <div className="flex-1 bg-gray-50 rounded p-2 text-center">
+                                                    <div className="text-xs text-gray-500">วันหยุดเดิม</div>
+                                                    <div className="font-bold text-gray-800">
+                                                        {format(swap.workDate instanceof Date ? swap.workDate : (swap.workDate as any).toDate(), "d MMM", { locale: th })}
+                                                    </div>
+                                                </div>
+                                                <div className="text-gray-400">→</div>
+                                                <div className="flex-1 bg-blue-50 rounded p-2 text-center">
+                                                    <div className="text-xs text-blue-500">วันหยุดใหม่</div>
+                                                    <div className="font-bold text-blue-700">
+                                                        {format(swap.holidayDate instanceof Date ? swap.holidayDate : (swap.holidayDate as any).toDate(), "d MMM", { locale: th })}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {swap.reason && (
+                                                <div className="text-xs text-gray-500 pl-2 mt-3 pt-2 border-t border-gray-50">
+                                                    เหตุผล: {swap.reason}
                                                 </div>
                                             )}
                                         </div>
