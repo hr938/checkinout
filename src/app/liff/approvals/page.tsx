@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { leaveService, otService, swapService, type LeaveRequest, type OTRequest, type SwapRequest } from "@/lib/firestore";
-import { CheckCircle, XCircle, Clock, FileText, Calendar, ChevronLeft, ArrowRight } from "lucide-react";
+import { CheckCircle, XCircle, Clock, FileText, Calendar, ChevronLeft, ArrowRight, Image as ImageIcon, X } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -15,6 +15,7 @@ export default function LiffApprovalsPage() {
     const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [liffError, setLiffError] = useState("");
+    const [viewingImage, setViewingImage] = useState<string | null>(null);
 
     // Confirm Dialog State
     const [confirmState, setConfirmState] = useState<{
@@ -321,6 +322,17 @@ export default function LiffApprovalsPage() {
                                                     <FileText className="w-4 h-4 text-gray-400 mt-0.5" />
                                                     <span className="flex-1">{req.reason}</span>
                                                 </div>
+                                                {req.attachment && (
+                                                    <div className="flex items-center gap-2 text-sm text-blue-600 mt-2">
+                                                        <button
+                                                            onClick={() => setViewingImage(req.attachment || null)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-100"
+                                                        >
+                                                            <ImageIcon className="w-4 h-4" />
+                                                            ดูหลักฐานแนบ
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="flex gap-3 pt-3 border-t border-gray-50">
@@ -485,6 +497,29 @@ export default function LiffApprovalsPage() {
                 message={alertState.message}
                 type={alertState.type}
             />
+
+            {/* Image Preview Modal */}
+            {viewingImage && (
+                <div
+                    className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"
+                    onClick={() => setViewingImage(null)}
+                >
+                    <div className="relative max-w-full max-h-full w-full flex items-center justify-center">
+                        <button
+                            onClick={() => setViewingImage(null)}
+                            className="absolute top-4 right-4 text-white hover:text-gray-300 p-2 bg-black/50 rounded-full"
+                        >
+                            <X className="w-8 h-8" />
+                        </button>
+                        <img
+                            src={viewingImage}
+                            alt="Evidence"
+                            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
