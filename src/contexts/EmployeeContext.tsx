@@ -28,15 +28,17 @@ export function EmployeeProvider({ children }: { children: ReactNode }) {
 
     const initLiff = async () => {
         try {
-            // DEV MODE: Skip LIFF and use mock data
+            // DEV MODE / MOCK LIFF: Skip LIFF and use mock data
             const isDevMode = process.env.NEXT_PUBLIC_DEV_MODE === "true";
-            if (isDevMode) {
-                console.log("🔧 DEV MODE: Skipping LINE login, using mock data");
+            const isMockLiff = process.env.NEXT_PUBLIC_MOCK_LIFF === "true";
+
+            if (isDevMode || isMockLiff) {
+                console.log("🧪 Mock LIFF mode enabled - skipping LINE login for employees");
                 const mockUserId = "dev_user_001";
                 const mockProfile = {
                     userId: mockUserId,
                     displayName: "Dev User (ทดสอบ)",
-                    pictureUrl: "https://via.placeholder.com/150/059669/FFFFFF?text=DEV",
+                    pictureUrl: "",
                 };
                 setLineUserId(mockUserId);
                 setLineProfile(mockProfile);

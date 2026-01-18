@@ -109,8 +109,6 @@ export default function DashboardPage() {
     const uniqueEmployeeIds = new Set<string>();
     const lateEmployeeIds = new Set<string>();
     const checkedOutEmployeeIds = new Set<string>();
-    const beforeBreakEmployeeIds = new Set<string>();
-    const afterBreakEmployeeIds = new Set<string>();
     const offsiteEmployeeIds = new Set<string>();
 
     attendances.forEach(a => {
@@ -123,12 +121,7 @@ export default function DashboardPage() {
         if (a.status === "ออกงาน") {
             checkedOutEmployeeIds.add(a.employeeId);
         }
-        if (a.status === "ก่อนพัก") {
-            beforeBreakEmployeeIds.add(a.employeeId);
-        }
-        if (a.status === "หลังพัก") {
-            afterBreakEmployeeIds.add(a.employeeId);
-        }
+
         if (a.status === "ออกนอกพื้นที่ขาไป" || a.status === "ออกนอกพื้นที่ขากลับ") {
             offsiteEmployeeIds.add(a.employeeId);
         }
@@ -138,8 +131,7 @@ export default function DashboardPage() {
         checkedIn: uniqueEmployeeIds.size,
         checkedOut: checkedOutEmployeeIds.size,
         late: lateEmployeeIds.size,
-        beforeBreak: beforeBreakEmployeeIds.size,
-        afterBreak: afterBreakEmployeeIds.size,
+
         offsite: offsiteEmployeeIds.size,
         total: attendances.length,
     };
@@ -150,8 +142,7 @@ export default function DashboardPage() {
             if (statusFilter === "เข้างาน") return a.status === "เข้างาน" || a.status === "สาย";
             if (statusFilter === "ออกงาน") return a.status === "ออกงาน";
             if (statusFilter === "สาย") return a.status === "สาย";
-            if (statusFilter === "ก่อนพัก") return a.status === "ก่อนพัก";
-            if (statusFilter === "หลังพัก") return a.status === "หลังพัก";
+
             if (statusFilter === "นอกพื้นที่") return a.status === "ออกนอกพื้นที่ขาไป" || a.status === "ออกนอกพื้นที่ขากลับ";
             return true;
         })
@@ -164,28 +155,28 @@ export default function DashboardPage() {
                 subtitle={`${attendances.length} results found`}
                 searchPlaceholder="Employee |"
                 action={
-                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                        <div className="relative w-full sm:w-auto">
-                            <input
-                                type="date"
-                                value={format(selectedDate, "yyyy-MM-dd")}
-                                onChange={(e) => setSelectedDate(new Date(e.target.value))}
-                                className="w-full sm:w-auto pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                            />
-                            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-                        </div>
+                    <div className="grid grid-cols-2 gap-3 w-full">
+                        {/* Date Picker */}
+                        <input
+                            type="date"
+                            value={format(selectedDate, "yyyy-MM-dd")}
+                            onChange={(e) => setSelectedDate(new Date(e.target.value))}
+                            className="w-full h-11 px-3 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer shadow-sm hover:shadow-md transition-all duration-200"
+                        />
+
+                        {/* Add Button */}
                         <Button
                             onClick={handleAddAttendance}
-                            className="w-full sm:w-auto bg-primary-dark text-white rounded-xl px-6 gap-2"
+                            className="w-full h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl px-3 gap-1.5 shadow-lg shadow-emerald-500/25 hover:shadow-xl hover:shadow-emerald-500/30 transition-all duration-200 font-medium text-sm"
                         >
-                            <Plus className="w-4 h-4" />
-                            บันทึกการลงเวลา
+                            <Plus className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate">บันทึกลงเวลา</span>
                         </Button>
                     </div>
                 }
             />
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
                 <div
                     onClick={() => setStatusFilter(statusFilter === "เข้างาน" ? null : "เข้างาน")}
                     className={`bg-white p-4 rounded-xl border cursor-pointer transition-all ${statusFilter === "เข้างาน" ? "border-green-500 ring-2 ring-green-200" : "border-gray-100 hover:border-gray-300"}`}
@@ -207,20 +198,7 @@ export default function DashboardPage() {
                     <div className="text-xs text-gray-500">สาย</div>
                     <div className={`text-2xl font-bold ${statusFilter === "สาย" ? "text-red-600" : "text-gray-800"}`}>{stats.late}</div>
                 </div>
-                <div
-                    onClick={() => setStatusFilter(statusFilter === "ก่อนพัก" ? null : "ก่อนพัก")}
-                    className={`bg-white p-4 rounded-xl border cursor-pointer transition-all ${statusFilter === "ก่อนพัก" ? "border-yellow-500 ring-2 ring-yellow-200" : "border-gray-100 hover:border-gray-300"}`}
-                >
-                    <div className="text-xs text-gray-500">ก่อนพัก</div>
-                    <div className={`text-2xl font-bold ${statusFilter === "ก่อนพัก" ? "text-yellow-600" : "text-gray-800"}`}>{stats.beforeBreak}</div>
-                </div>
-                <div
-                    onClick={() => setStatusFilter(statusFilter === "หลังพัก" ? null : "หลังพัก")}
-                    className={`bg-white p-4 rounded-xl border cursor-pointer transition-all ${statusFilter === "หลังพัก" ? "border-orange-500 ring-2 ring-orange-200" : "border-gray-100 hover:border-gray-300"}`}
-                >
-                    <div className="text-xs text-gray-500">หลังพัก</div>
-                    <div className={`text-2xl font-bold ${statusFilter === "หลังพัก" ? "text-orange-600" : "text-gray-800"}`}>{stats.afterBreak}</div>
-                </div>
+
                 <div
                     onClick={() => setStatusFilter(statusFilter === "นอกพื้นที่" ? null : "นอกพื้นที่")}
                     className={`bg-white p-4 rounded-xl border cursor-pointer transition-all ${statusFilter === "นอกพื้นที่" ? "border-purple-500 ring-2 ring-purple-200" : "border-gray-100 hover:border-gray-300"}`}

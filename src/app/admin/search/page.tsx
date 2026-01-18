@@ -161,7 +161,7 @@ export default function SearchPage() {
     };
 
     return (
-        <div className="flex-1 p-8 max-w-5xl mx-auto">
+        <div className="flex-1  max-w-5xl mx-auto">
             <PageHeader
                 title="ค้นหาและจัดการข้อมูลพนักงาน"
                 subtitle="ดูประวัติการเข้างาน, การลา, OT และจัดการข้อมูลรายบุคคล"

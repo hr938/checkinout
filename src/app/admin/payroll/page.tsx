@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { employeeService, attendanceService, otService, systemConfigService, type Employee, type Attendance, type OTRequest, type SystemConfig } from "@/lib/firestore";
+import { employeeService, attendanceService, otService, swapService, systemConfigService, type Employee, type Attendance, type OTRequest, type SwapRequest, type SystemConfig } from "@/lib/firestore";
 import { Search, Calendar, DollarSign, Download, Filter } from "lucide-react";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import { th } from "date-fns/locale";
@@ -351,7 +351,50 @@ export default function PayrollPage() {
                 targetEmployees = targetEmployees.filter(e => e.department === selectedDepartment);
             }
 
-            // 3. Fetch Data & Calculate
+            // 3. Fetch ALL Data ONCE (fix N+1 query problem)
+            // Instead of querying per employee, fetch all attendance, OT, and swap requests in the date range
+            const [allAttendance, allOTRequests, allSwapRequests] = await Promise.all([
+                attendanceService.getByDateRange(startDate, endDate),
+                otService.getByDateRange(startDate, endDate),
+                swapService.getAll() // Get all swap requests and filter later
+            ]);
+
+            // Filter only approved swap requests that affect the date range
+            const approvedSwaps = allSwapRequests.filter(s => {
+                if (s.status !== "อนุมัติ") return false;
+                const workDate = s.workDate instanceof Date ? s.workDate : new Date(s.workDate);
+                const holidayDate = s.holidayDate instanceof Date ? s.holidayDate : new Date(s.holidayDate);
+                return (workDate >= startDate && workDate <= endDate) ||
+                    (holidayDate >= startDate && holidayDate <= endDate);
+            });
+
+            // Group attendance and OT by employee ID for efficient lookup
+            const attendanceByEmployee = new Map<string, Attendance[]>();
+            allAttendance.forEach(a => {
+                if (!attendanceByEmployee.has(a.employeeId)) {
+                    attendanceByEmployee.set(a.employeeId, []);
+                }
+                attendanceByEmployee.get(a.employeeId)?.push(a);
+            });
+
+            const otByEmployee = new Map<string, OTRequest[]>();
+            allOTRequests.forEach(ot => {
+                if (!otByEmployee.has(ot.employeeId)) {
+                    otByEmployee.set(ot.employeeId, []);
+                }
+                otByEmployee.get(ot.employeeId)?.push(ot);
+            });
+
+            // Group swap requests by employee ID
+            const swapsByEmployee = new Map<string, SwapRequest[]>();
+            approvedSwaps.forEach(swap => {
+                if (!swapsByEmployee.has(swap.employeeId)) {
+                    swapsByEmployee.set(swap.employeeId, []);
+                }
+                swapsByEmployee.get(swap.employeeId)?.push(swap);
+            });
+
+            // 4. Calculate for each employee (no more individual queries!)
             const results: PayrollItem[] = [];
 
             // Use config values or defaults
@@ -370,19 +413,12 @@ export default function PayrollPage() {
                     gracePeriod: config?.lateGracePeriod ?? 0
                 };
 
-                // Fetch Attendance & OT
-                const [attendance, otRequests] = await Promise.all([
-                    attendanceService.getHistory(emp.id, startDate, endDate),
-                    otService.getByEmployeeId(emp.id)
-                ]);
+                // Get attendance and OT from pre-fetched data (no database query!)
+                const attendance = attendanceByEmployee.get(emp.id) || [];
+                const otRequests = otByEmployee.get(emp.id) || [];
 
-                // Filter OT by date and status
-                const approvedOT = otRequests.filter(ot =>
-                    ot.status === "อนุมัติ" &&
-                    ot.date &&
-                    ot.date >= startDate &&
-                    ot.date <= endDate
-                );
+                // Filter OT by status
+                const approvedOT = otRequests.filter(ot => ot.status === "อนุมัติ");
 
                 // Group Attendance by Date
                 const dailyAttendance = new Map<string, Attendance[]>();
@@ -491,6 +527,22 @@ export default function PayrollPage() {
                 let otPayHoliday = 0;
                 let otPaySpecial = 0;
 
+                // Get this employee's swap requests for date checking
+                const employeeSwaps = swapsByEmployee.get(emp.id) || [];
+
+                // Create sets for quick lookup of swapped dates
+                // workDatesFromHoliday: วันหยุดที่ขอมาทำงาน (ถือเป็นวันทำงานปกติ)
+                // holidayDatesFromWork: วันทำงานที่ขอหยุดแทน (ถือเป็นวันหยุด)
+                const workDatesFromHoliday = new Set<string>();
+                const holidayDatesFromWork = new Set<string>();
+
+                employeeSwaps.forEach(swap => {
+                    const workDate = swap.workDate instanceof Date ? swap.workDate : new Date(swap.workDate);
+                    const holidayDate = swap.holidayDate instanceof Date ? swap.holidayDate : new Date(swap.holidayDate);
+                    workDatesFromHoliday.add(format(workDate, "yyyy-MM-dd"));
+                    holidayDatesFromWork.add(format(holidayDate, "yyyy-MM-dd"));
+                });
+
                 approvedOT.forEach(ot => {
                     if (ot.startTime && ot.endTime && ot.date) {
                         const start = ot.startTime.getTime();
@@ -509,13 +561,30 @@ export default function PayrollPage() {
                         });
 
                         if (customHoliday) {
+                            // Custom holiday (ตามที่กำหนดใน settings)
                             otHoursSpecial += hours;
                             otPaySpecial += hours * hourlyRate * customHoliday.otMultiplier;
                         } else {
                             const dayOfWeek = ot.date.getDay();
-                            const isHoliday = weeklyHolidays.includes(dayOfWeek);
+                            const isWeeklyHoliday = weeklyHolidays.includes(dayOfWeek);
 
-                            if (isHoliday) {
+                            // Check swap status:
+                            // - ถ้าเป็นวันที่อยู่ใน workDatesFromHoliday = วันหยุดที่สลับมาทำงาน → ถือเป็นวันทำงาน (OT ปกติ)
+                            // - ถ้าเป็นวันที่อยู่ใน holidayDatesFromWork = วันทำงานที่สลับไปหยุด → ถือเป็นวันหยุด (OT x3)
+                            const isSwappedToWorkday = workDatesFromHoliday.has(otDateStr);
+                            const isSwappedToHoliday = holidayDatesFromWork.has(otDateStr);
+
+                            // Determine effective holiday status
+                            let effectiveHoliday = isWeeklyHoliday;
+                            if (isSwappedToWorkday) {
+                                // วันหยุดที่สลับมาทำงาน → ไม่ถือเป็นวันหยุด
+                                effectiveHoliday = false;
+                            } else if (isSwappedToHoliday) {
+                                // วันทำงานที่สลับไปหยุด → ถือเป็นวันหยุด
+                                effectiveHoliday = true;
+                            }
+
+                            if (effectiveHoliday) {
                                 otHoursHoliday += hours;
                                 otPayHoliday += hours * hourlyRate * otMultiplierHoliday;
                             } else {

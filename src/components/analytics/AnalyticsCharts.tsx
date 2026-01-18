@@ -584,11 +584,11 @@ export function AnalyticsCharts() {
                         </div>
                     </div>
                     <div className="flex gap-2 w-full md:w-auto">
-                        <Button onClick={() => setShowExportModal(true)} variant="outline" className="gap-2 flex-1 md:flex-none">
+                        <Button onClick={() => setShowExportModal(true)} variant="outline" className="gap-2 flex-1 md:flex-none bg-primary hover:bg-primary text-white">
                             <Download className="w-4 h-4" />
                             Export CSV
                         </Button>
-                        <Button onClick={() => setShowRawExportModal(true)} className="gap-2 flex-1 md:flex-none rounded-full bg-primary-dark hover:bg-primary-dark text-white">
+                        <Button onClick={() => setShowRawExportModal(true)} className="gap-2 flex-1 md:flex-none  bg-primary-dark hover:bg-primary-dark text-white">
                             <FileSpreadsheet className="w-4 h-4" />
                             Export ข้อมูลดิบ
                         </Button>
@@ -1002,8 +1002,8 @@ export function AnalyticsCharts() {
                                             cursor={{ fill: '#F9FAFB' }}
                                         />
                                         <Legend />
-                                        <Bar dataKey="present" name="ตรงเวลา" fill="#EBDACA" radius={[4, 4, 0, 0]} stackId="a" />
-                                        <Bar dataKey="late" name="สาย" fill="#FBC02D" radius={[4, 4, 0, 0]} stackId="a" />
+                                        <Bar dataKey="present" name="ตรงเวลา" fill="#7bd4abff" radius={[4, 4, 0, 0]} stackId="a" />
+                                        <Bar dataKey="late" name="สาย" fill="#1c7a56ff" radius={[4, 4, 0, 0]} stackId="a" />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>

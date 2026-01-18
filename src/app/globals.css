@@ -1,21 +1,34 @@
 @import "tailwindcss";
 
 :root {
-  --primary-light: #D1FAE5;
-  --primary: #059669;
-  --primary-dark: #009137;
-  --secondary: #313131;
-  --accent: #afa0a0;
-  --text: #838383;
-  --subtext: #6B7280;
-  --border: #d6d6d6;
+  /* Monochrome Theme Palette */
+  --primary-light: #F4F4F5;
+  /* Zinc-100 */
+  --primary: #009966;
+  /* Zinc-900 (Nearly Black) */
+  --primary-dark: #565656;
+  /* Zinc-950 */
+
+  --secondary: #FFFFFF;
+  --accent: #71717A;
+  /* Zinc-500 */
+
+  --text: #18181B;
+  /* Main Text (Zinc-900) */
+  --subtext: #52525B;
+  /* Sub Text (Zinc-600) */
+
+  --border: #E4E4E7;
+  /* Zinc-200 */
+
+  /* Status Colors (kept but desaturated or high contrast if needed, keeping standard for UX) */
   --success: #10B981;
   --error: #EF4444;
   --warning: #F59E0B;
   --info: #3B82F6;
-  --border: #eaeaea;
 
-  --background: #F3F4F6;
+  --background: #FAFAFA;
+  /* Zinc-50 */
   --foreground: var(--text);
   --card: #FFFFFF;
 
@@ -26,10 +39,21 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #111827;
-    --foreground: #000000;
-    --card: #1F2937;
-    --border: #eaeaea;
+    --background: #fdfdfd;
+    /* Zinc-950 */
+    --foreground: #535353;
+    /* Zinc-50 */
+    --card: #ffffff;
+    /* Zinc-900 */
+    --border: #cfcfcf;
+    /* Zinc-800 */
+
+    --primary: #009966;
+    --primary-light: #ebfff7;
+    --primary-dark: #565656;
+
+    --text: #FAFAFA;
+    --subtext: #A1A1AA;
   }
 }
 
@@ -40,26 +64,25 @@ body {
 }
 
 .bg-background {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgb(255 255 255 / 18%));
+  background-color: var(--background);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-radius: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .border {
-  background-color: #ffffff;
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
 }
 
-.bg-card {
+.glass-card {
   background-color: var(--card);
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
 }
 
 
+/* Black & White Gradient/Style */
 .bg-primary {
-  background: linear-gradient(180deg, #ffffff 0%, #E0F2F1 50%, #FFFFFF 100%);
+  /* Subtle monochrome gradient */
+  background: var(--primary);
 }
 
 .bg-primary-light {
@@ -91,11 +114,11 @@ body {
 }
 
 .text-primary-dark {
-  color: var(--primary-dark);
+  color: var(--primary);
 }
 
 .text-primary-light {
-  color: var(--primary-light);
+  color: var(--subtext);
 }
 
 .text-primary {
@@ -123,5 +146,5 @@ body {
 }
 
 .shadow-sm {
-  box-shadow: 0 1px 3px 0 rgba(249, 249, 249, 0.1), 0 1px 2px -1px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
 }

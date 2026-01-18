@@ -30,6 +30,13 @@ export default function ReportsPage() {
         }
     }, [user, selectedMonth]);
 
+    // Load yearly leave data only when Leave tab is selected (lazy loading)
+    useEffect(() => {
+        if (activeTab === "leave" && allYearLeaves.length === 0 && !loading) {
+            loadYearlyLeaveData();
+        }
+    }, [activeTab]);
+
     const loadData = async () => {
         setLoading(true);
         try {
@@ -37,15 +44,11 @@ export default function ReportsPage() {
             const startDate = startOfMonth(new Date(year, month - 1));
             const endDate = endOfMonth(new Date(year, month - 1));
 
-            // ดึงข้อมูลทั้งปีสำหรับนับครั้งที่ลา
-            const yearStart = new Date(year, 0, 1);
-            const yearEnd = new Date(year, 11, 31);
-
-            const [otRes, attendanceRes, leaveRes, yearLeaveRes, empRes] = await Promise.all([
+            // Load only current month data on initial load (faster!)
+            const [otRes, attendanceRes, leaveRes, empRes] = await Promise.all([
                 otService.getByDateRange(startDate, endDate),
                 attendanceService.getByDateRange(startDate, endDate),
                 leaveService.getByDateRange(startDate, endDate),
-                leaveService.getByDateRange(yearStart, yearEnd),
                 employeeService.getAll(),
             ]);
 
@@ -57,13 +60,29 @@ export default function ReportsPage() {
 
             // Only approved leaves
             setLeaveData(leaveRes.filter(l => l.status === "อนุมัติ"));
-            setAllYearLeaves(yearLeaveRes.filter(l => l.status === "อนุมัติ"));
 
             setEmployees(empRes);
+
+            // Reset yearly data when month changes
+            setAllYearLeaves([]);
         } catch (error) {
             console.error("Error loading data:", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Separate function for loading yearly leave data (expensive operation)
+    const loadYearlyLeaveData = async () => {
+        try {
+            const [year] = selectedMonth.split("-").map(Number);
+            const yearStart = new Date(year, 0, 1);
+            const yearEnd = new Date(year, 11, 31);
+
+            const yearLeaveRes = await leaveService.getByDateRange(yearStart, yearEnd);
+            setAllYearLeaves(yearLeaveRes.filter(l => l.status === "อนุมัติ"));
+        } catch (error) {
+            console.error("Error loading yearly leave data:", error);
         }
     };
 

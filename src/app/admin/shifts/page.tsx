@@ -126,7 +126,7 @@ export default function ShiftsPage() {
                 </Button>
                 <a
                     href="/admin/shifts/assign"
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                    className="inline-flex items-center px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl font-medium transition-colors"
                 >
                     <Clock className="w-4 h-4 mr-2" /> กำหนดกะพนักงาน
                 </a>

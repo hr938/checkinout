@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Save, Clock, AlertCircle, CheckCircle2, DollarSign, HardDrive, Calendar, Plus, Trash2, MapPin, Crosshair, Database, ExternalLink, RefreshCw, Copy, FileJson, Briefcase, ArrowLeftRight } from "lucide-react";
+import { Save, Clock, AlertCircle, CheckCircle2, DollarSign, HardDrive, Calendar, Plus, Trash2, MapPin, Crosshair, Database, ExternalLink, RefreshCw, Copy, FileJson, Briefcase, ArrowLeftRight, Users } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { WORK_TIME_CONFIG } from "@/lib/workTime";
@@ -50,17 +50,11 @@ export default function SettingsPage() {
     const [saved, setSaved] = useState(false);
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
-    const [storageUsage, setStorageUsage] = useState<StorageStats>({
-        totalBytes: 0,
-        fileCount: 0,
-        limitBytes: PHOTO_STORAGE_LIMIT,
-        usagePercent: 0,
-        isNearLimit: false,
-        canUpload: true
-    });
-    const [loadingStorage, setLoadingStorage] = useState(true);
+    const [storageUsage, setStorageUsage] = useState<StorageStats | null>(null);
+    const [loadingStorage, setLoadingStorage] = useState(false);
     const [cleanupLoading, setCleanupLoading] = useState(false);
     const [gettingLocation, setGettingLocation] = useState(false);
+    const [updatingAllHolidays, setUpdatingAllHolidays] = useState(false);
 
     // Index Checker State
     const [indexResults, setIndexResults] = useState<IndexCheckResult[]>([]);
@@ -155,19 +149,18 @@ export default function SettingsPage() {
         fetchSettings();
     }, []);
 
-    useEffect(() => {
-        const loadStorage = async () => {
-            try {
-                const usage = await getStorageUsage();
-                setStorageUsage(usage);
-            } catch (error) {
-                console.error("Error loading storage:", error);
-            } finally {
-                setLoadingStorage(false);
-            }
-        };
-        loadStorage();
-    }, []);
+    // Storage loading is now lazy (on-demand) to improve page load performance
+    const loadStorageUsage = async () => {
+        setLoadingStorage(true);
+        try {
+            const usage = await getStorageUsage();
+            setStorageUsage(usage);
+        } catch (error) {
+            console.error("Error loading storage:", error);
+        } finally {
+            setLoadingStorage(false);
+        }
+    };
 
     const handleAddHoliday = () => {
         if (!newHoliday.name) return;
@@ -265,6 +258,8 @@ export default function SettingsPage() {
             setGettingLocation(false);
         }
     };
+
+
 
     const handleSave = async () => {
         setLoading(true);
@@ -424,7 +419,25 @@ export default function SettingsPage() {
                                     <HardDrive className="w-4 h-4" />
                                     <span>พื้นที่จัดเก็บรูปภาพ (Firestore)</span>
                                 </div>
-                                {loadingStorage ? (
+                                {storageUsage === null ? (
+                                    <button
+                                        onClick={loadStorageUsage}
+                                        disabled={loadingStorage}
+                                        className="px-3 py-1 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1"
+                                    >
+                                        {loadingStorage ? (
+                                            <>
+                                                <RefreshCw className="w-3 h-3 animate-spin" />
+                                                กำลังคำนวณ...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <HardDrive className="w-3 h-3" />
+                                                ตรวจสอบพื้นที่
+                                            </>
+                                        )}
+                                    </button>
+                                ) : loadingStorage ? (
                                     <span className="text-xs text-gray-400">กำลังโหลด...</span>
                                 ) : (
                                     <span className="text-sm font-medium text-gray-700">
@@ -433,25 +446,29 @@ export default function SettingsPage() {
                                 )}
                             </div>
 
-                            {/* Progress Bar */}
-                            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                                <div
-                                    className={`h-full transition-all duration-500 ${storageUsage.usagePercent > 90
-                                        ? 'bg-red-500'
-                                        : storageUsage.usagePercent > 70
-                                            ? 'bg-yellow-500'
-                                            : 'bg-blue-500'
-                                        }`}
-                                    style={{
-                                        width: `${Math.min(storageUsage.usagePercent, 100)}%`
-                                    }}
-                                />
-                            </div>
+                            {/* Progress Bar - show only when data is loaded */}
+                            {storageUsage !== null && (
+                                <>
+                                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                                        <div
+                                            className={`h-full transition-all duration-500 ${storageUsage.usagePercent > 90
+                                                ? 'bg-red-500'
+                                                : storageUsage.usagePercent > 70
+                                                    ? 'bg-yellow-500'
+                                                    : 'bg-blue-500'
+                                                }`}
+                                            style={{
+                                                width: `${Math.min(storageUsage.usagePercent, 100)}%`
+                                            }}
+                                        />
+                                    </div>
 
-                            <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                                <span>{storageUsage.fileCount.toLocaleString()} รูป</span>
-                                <span>{storageUsage.usagePercent.toFixed(1)}% ที่ใช้</span>
-                            </div>
+                                    <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                                        <span>{storageUsage.fileCount.toLocaleString()} รูป</span>
+                                        <span>{storageUsage.usagePercent.toFixed(1)}% ที่ใช้</span>
+                                    </div>
+                                </>
+                            )}
 
                             {/* Info about Firestore storage */}
                             <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded-lg">
@@ -461,7 +478,7 @@ export default function SettingsPage() {
                             </div>
 
                             {/* Warning if near limit */}
-                            {storageUsage.isNearLimit && (
+                            {storageUsage?.isNearLimit && (
                                 <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
                                     <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
                                     <div className="text-xs text-red-700">
@@ -472,7 +489,7 @@ export default function SettingsPage() {
                             )}
 
                             {/* Cannot upload warning */}
-                            {!storageUsage.canUpload && (
+                            {storageUsage && !storageUsage.canUpload && (
                                 <div className="mt-3 p-3 bg-red-100 border border-red-300 rounded-lg flex items-start gap-2">
                                     <AlertCircle className="w-4 h-4 text-red-700 mt-0.5 flex-shrink-0" />
                                     <div className="text-xs text-red-800">
@@ -887,9 +904,12 @@ export default function SettingsPage() {
 
                         {/* Weekly Holidays */}
                         <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                วันหยุดประจำสัปดาห์
-                            </label>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="block text-sm font-medium text-gray-700">
+                                    วันหยุดประจำสัปดาห์
+                                </label>
+
+                            </div>
                             <div className="flex flex-wrap gap-3">
                                 {["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"].map((day, index) => (
                                     <label key={index} className="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-100">

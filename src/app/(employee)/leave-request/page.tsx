@@ -248,7 +248,9 @@ export default function LeaveRequestPage() {
             let attachmentBase64: string | undefined = undefined;
             if (attachment) {
                 try {
-                    attachmentBase64 = await compressBase64Image(attachment, 640, 480, 0.6);
+                    // Use higher resolution for documents (1200x1600) with better quality (0.8)
+                    // Documents need to be readable, unlike selfies which can be smaller
+                    attachmentBase64 = await compressBase64Image(attachment, 1200, 1600, 0.8);
                 } catch (e) {
                     console.error("Error compressing attachment:", e);
                     attachmentBase64 = attachment;
@@ -443,7 +445,7 @@ export default function LeaveRequestPage() {
                         <Button
                             type="submit"
                             disabled={loading}
-                            className="w-full h-14 text-lg rounded-2xl bg-primary-dark hover:bg-primary-dark shadow-lg shadow-blue-900/20 mt-4"
+                            className="w-full h-14 text-lg rounded-2xl bg-primary hover:bg-primary/80 shadow-lg shadow-blue-900/20 mt-4"
                         >
                             {loading ? "กำลังส่งข้อมูล..." : (
                                 <span className="flex items-center gap-2">
@@ -457,4 +459,3 @@ export default function LeaveRequestPage() {
         </div>
     );
 }
-

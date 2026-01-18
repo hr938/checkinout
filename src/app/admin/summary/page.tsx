@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { attendanceService, employeeService, type Attendance, type Employee } from "@/lib/firestore";
+import { attendanceService, employeeService, swapService, systemConfigService, type Attendance, type Employee, type SwapRequest } from "@/lib/firestore";
 import { useAdmin } from "@/components/auth/AuthProvider";
 import { Users, Calendar, Clock, CheckCircle, XCircle, AlertTriangle, Download, Search } from "lucide-react";
 import { formatMinutesToHours } from "@/lib/workTime";
@@ -14,8 +14,6 @@ interface DailySummary {
     employee: Employee;
     checkIn?: Date | null;
     checkOut?: Date | null;
-    beforeBreak?: Date | null;
-    afterBreak?: Date | null;
     isLate: boolean;
     lateMinutes?: number;
     offsiteCount: number;
@@ -51,14 +49,23 @@ export default function DailySummaryPage() {
             const endDate = new Date(date);
             endDate.setHours(23, 59, 59, 999);
 
-            const [empData, attData] = await Promise.all([
+            const [empData, attData, configData, allSwaps] = await Promise.all([
                 employeeService.getAll(),
                 attendanceService.getByDateRange(startDate, endDate),
+                systemConfigService.get(),
+                swapService.getAll()
             ]);
 
             const activeEmployees = empData.filter(e => e.status === "ทำงาน");
             setEmployees(activeEmployees);
             setAttendances(attData);
+
+            // Get weekly holidays from config (default to Sat, Sun if missing)
+            const weeklyHolidays = configData?.weeklyHolidays || [0, 6];
+            const dateStr = format(date, "yyyy-MM-dd");
+
+            // Filter approved swaps that affect the selected date
+            const approvedSwaps = allSwaps.filter(s => s.status === "อนุมัติ");
 
             // Build summaries
             const daySummaries: DailySummary[] = activeEmployees.map(emp => {
@@ -67,21 +74,39 @@ export default function DailySummaryPage() {
                 const checkInRec = empAttendances.find(a => a.status === "เข้างาน");
                 const checkOutRec = empAttendances.find(a => a.status === "ออกงาน");
                 const lateRec = empAttendances.find(a => a.status === "สาย");
-                const beforeBreakRec = empAttendances.find(a => a.status === "ก่อนพัก");
-                const afterBreakRec = empAttendances.find(a => a.status === "หลังพัก");
                 const offsiteRecs = empAttendances.filter(a =>
                     a.status === "ออกนอกพื้นที่ขาไป" || a.status === "ออกนอกพื้นที่ขากลับ"
                 );
 
                 const hasCheckedIn = checkInRec || lateRec;
-                const isHoliday = emp.weeklyHolidays?.includes(date.getDay()) || false;
+
+                // Check if this day is a weekly holiday
+                const isWeeklyHoliday = weeklyHolidays.includes(date.getDay());
+
+                // Check swap status for this employee on this date
+                const employeeSwaps = approvedSwaps.filter(s => s.employeeId === emp.id);
+                let effectiveHoliday = isWeeklyHoliday;
+
+                employeeSwaps.forEach(swap => {
+                    const workDate = swap.workDate instanceof Date ? swap.workDate : new Date(swap.workDate);
+                    const holidayDate = swap.holidayDate instanceof Date ? swap.holidayDate : new Date(swap.holidayDate);
+
+                    // ถ้าวันนี้เป็นวันที่ขอมาทำงาน (workDate) → ไม่ใช่วันหยุด
+                    if (format(workDate, "yyyy-MM-dd") === dateStr) {
+                        effectiveHoliday = false;
+                    }
+                    // ถ้าวันนี้เป็นวันที่ขอหยุดแทน (holidayDate) → เป็นวันหยุด
+                    if (format(holidayDate, "yyyy-MM-dd") === dateStr) {
+                        effectiveHoliday = true;
+                    }
+                });
 
                 // ดึง lateMinutes จาก record (อาจอยู่ใน checkInRec หรือ lateRec)
                 const actualLateMinutes = lateRec?.lateMinutes || checkInRec?.lateMinutes || 0;
                 const isActuallyLate = actualLateMinutes > 0;
 
                 let status: DailySummary["status"] = "ไม่มาทำงาน";
-                if (isHoliday) {
+                if (effectiveHoliday) {
                     status = "วันหยุด";
                 } else if (lateRec || isActuallyLate) {
                     status = "สาย";
@@ -94,8 +119,6 @@ export default function DailySummaryPage() {
                     employee: emp,
                     checkIn: checkInRec?.checkIn || lateRec?.checkIn,
                     checkOut: checkOutRec?.checkOut,
-                    beforeBreak: beforeBreakRec?.checkIn,
-                    afterBreak: afterBreakRec?.checkIn,
                     isLate: isActuallyLate,
                     lateMinutes: actualLateMinutes > 0 ? actualLateMinutes : undefined,
                     offsiteCount: offsiteRecs.length,
@@ -150,14 +173,12 @@ export default function DailySummaryPage() {
 
     // Export CSV
     const exportCSV = () => {
-        const headers = ["พนักงาน", "แผนก", "สถานะ", "เข้างาน", "ก่อนพัก", "หลังพัก", "ออกงาน", "ออกพื้นที่", "สาย(นาที)"];
+        const headers = ["พนักงาน", "แผนก", "สถานะ", "เข้างาน", "ออกงาน", "ออกพื้นที่", "สาย(นาที)"];
         const rows = filteredSummaries.map(s => [
             s.employee.name,
             s.employee.department || "-",
             s.status,
             formatTime(s.checkIn),
-            formatTime(s.beforeBreak),
-            formatTime(s.afterBreak),
             formatTime(s.checkOut),
             s.offsiteCount > 0 ? `${s.offsiteCount} ครั้ง` : "-",
             s.lateMinutes ? s.lateMinutes.toString() : "-",
@@ -222,7 +243,7 @@ export default function DailySummaryPage() {
                 <button
                     onClick={exportCSV}
                     disabled={filteredSummaries.length === 0}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Download className="w-4 h-4" />
                     Export CSV
@@ -265,8 +286,6 @@ export default function DailySummaryPage() {
                                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">พนักงาน</th>
                                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">สถานะ</th>
                                     <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">เข้างาน</th>
-                                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">ก่อนพัก</th>
-                                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">หลังพัก</th>
                                     <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">ออกงาน</th>
                                     <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">ออกพื้นที่</th>
                                     <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">หมายเหตุ</th>
@@ -292,8 +311,6 @@ export default function DailySummaryPage() {
                                                 {formatTime(summary.checkIn)}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-center text-sm text-gray-600">{formatTime(summary.beforeBreak)}</td>
-                                        <td className="px-4 py-3 text-center text-sm text-gray-600">{formatTime(summary.afterBreak)}</td>
                                         <td className="px-4 py-3 text-center text-sm text-gray-700">{formatTime(summary.checkOut)}</td>
                                         <td className="px-4 py-3 text-center">
                                             {summary.offsiteCount > 0 ? (
@@ -313,7 +330,7 @@ export default function DailySummaryPage() {
                                 ))}
                                 {filteredSummaries.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
+                                        <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                                             ไม่มีข้อมูล
                                         </td>
                                     </tr>

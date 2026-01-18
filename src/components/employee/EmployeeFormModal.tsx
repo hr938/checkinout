@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { employeeService, shiftService, type Employee, type Shift } from "@/lib/firestore";
+import { employeeService, type Employee } from "@/lib/firestore";
 
 interface EmployeeFormModalProps {
     isOpen: boolean;
@@ -15,20 +15,7 @@ interface EmployeeFormModalProps {
 
 export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOnly = false }: EmployeeFormModalProps) {
     const [loading, setLoading] = useState(false);
-    const [shifts, setShifts] = useState<Shift[]>([]);
 
-    // Load shifts on mount
-    useEffect(() => {
-        const loadShifts = async () => {
-            try {
-                const data = await shiftService.getAll();
-                setShifts(data);
-            } catch (error) {
-                console.error("Error loading shifts:", error);
-            }
-        };
-        loadShifts();
-    }, []);
 
     const [formData, setFormData] = useState({
         employeeId: "",
@@ -42,13 +29,12 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
         baseSalary: 0,
         status: "ทำงาน" as "ทำงาน" | "ลาออก" | "พ้นสภาพ",
         endDate: undefined as Date | undefined,
+        lineUserId: "",
         leaveQuota: {
             personal: 3,
             sick: 30,
             vacation: 5,
         },
-        weeklyHolidays: [0, 6] as number[], // เสาร์-อาทิตย์ เป็นค่าเริ่มต้น
-        shiftId: "" as string,
     });
 
     // Update form when employee prop changes
@@ -66,13 +52,12 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                 baseSalary: employee.baseSalary || 0,
                 status: employee.status || "ทำงาน",
                 endDate: employee.endDate,
+                lineUserId: employee.lineUserId || "",
                 leaveQuota: {
                     personal: employee.leaveQuota?.personal || 3,
                     sick: employee.leaveQuota?.sick || 30,
                     vacation: employee.leaveQuota?.vacation || 5,
                 },
-                weeklyHolidays: employee.weeklyHolidays || [0, 6],
-                shiftId: employee.shiftId || "",
             });
         } else {
             // Reset form for new employee
@@ -88,16 +73,15 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                 baseSalary: 0,
                 status: "ทำงาน",
                 endDate: undefined,
+                lineUserId: "",
                 leaveQuota: {
                     personal: 6,
                     sick: 30,
                     vacation: 10,
                 },
-                weeklyHolidays: [0, 6],
-                shiftId: "",
             });
         }
-    }, [employee, isOpen]); // Added isOpen to reset when opening empty
+    }, [employee, isOpen]);
 
     if (!isOpen) return null;
 
@@ -131,13 +115,12 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                 baseSalary: 0,
                 status: "ทำงาน",
                 endDate: undefined,
+                lineUserId: "",
                 leaveQuota: {
                     personal: 6,
                     sick: 30,
                     vacation: 10,
                 },
-                weeklyHolidays: [0, 6],
-                shiftId: "",
             });
 
             onSuccess();
@@ -342,26 +325,46 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                         </div>
                     </div>
 
-                    {/* Shift Selection */}
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-700">กะเวลาทำงาน</h3>
-                        <select
-                            value={formData.shiftId}
-                            onChange={(e) => setFormData({ ...formData, shiftId: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
-                            disabled={readOnly}
-                        >
-                            <option value="">ใช้กะหลัก (Default)</option>
-                            {shifts.map((shift) => (
-                                <option key={shift.id} value={shift.id}>
-                                    {shift.name} ({shift.checkInHour.toString().padStart(2, "0")}:{shift.checkInMinute.toString().padStart(2, "0")} - {shift.checkOutHour.toString().padStart(2, "0")}:{shift.checkOutMinute.toString().padStart(2, "0")})
-                                </option>
-                            ))}
-                        </select>
-                        {shifts.length === 0 && (
-                            <p className="text-xs text-gray-500">ยังไม่มีกะที่กำหนด ไปสร้างกะได้ที่ Admin &gt; กะเวลาทำงาน</p>
-                        )}
-                    </div>
+                    {/* LINE User ID - แสดงเฉพาะเมื่อแก้ไขพนักงานที่มีอยู่แล้ว */}
+                    {employee && (
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-semibold text-gray-700">การเชื่อมต่อ LINE</h3>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    LINE User ID
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={formData.lineUserId}
+                                        className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 font-mono text-sm"
+                                        placeholder="ยังไม่ได้ผูกบัญชี LINE"
+                                        readOnly
+                                    />
+                                    {formData.lineUserId && !readOnly && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, lineUserId: "" })}
+                                            className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-colors flex items-center gap-2"
+                                            title="ลบ LINE User ID"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                            <span className="hidden sm:inline">ลบ</span>
+                                        </button>
+                                    )}
+                                </div>
+                                {formData.lineUserId ? (
+                                    <p className="text-xs text-green-600 mt-1">
+                                        ✓ ผูกบัญชีแล้ว - ลบเพื่อให้พนักงานสามารถผูกบัญชีใหม่ได้
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        พนักงานจะถูกผูกบัญชีอัตโนมัติเมื่อเข้าใช้งานผ่าน LINE
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Leave Quota */}
                     <div className="space-y-4">
@@ -421,44 +424,7 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                         </div>
                     </div>
 
-                    {/* Weekly Holidays */}
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-700">วันหยุดประจำสัปดาห์</h3>
-                        <div className="grid grid-cols-7 gap-2">
-                            {["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."].map((day, index) => (
-                                <label
-                                    key={index}
-                                    className={`flex flex-col items-center p-3 rounded-xl border-2 cursor-pointer transition-all ${formData.weeklyHolidays.includes(index)
-                                        ? "bg-red-500 border-red-500 text-white shadow-md"
-                                        : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300"
-                                        } ${readOnly ? "cursor-not-allowed opacity-60" : ""}`}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.weeklyHolidays.includes(index)}
-                                        onChange={(e) => {
-                                            if (readOnly) return;
-                                            if (e.target.checked) {
-                                                setFormData({
-                                                    ...formData,
-                                                    weeklyHolidays: [...formData.weeklyHolidays, index].sort()
-                                                });
-                                            } else {
-                                                setFormData({
-                                                    ...formData,
-                                                    weeklyHolidays: formData.weeklyHolidays.filter(d => d !== index)
-                                                });
-                                            }
-                                        }}
-                                        className="sr-only"
-                                        disabled={readOnly}
-                                    />
-                                    <span className="text-xs font-medium">{day}</span>
-                                </label>
-                            ))}
-                        </div>
-                        <p className="text-xs text-gray-500">คลิกเพื่อเลือก/ยกเลิก วันหยุดประจำสัปดาห์</p>
-                    </div>
+
 
                     {/* Actions */}
                     <div className="flex gap-3 pt-4">
