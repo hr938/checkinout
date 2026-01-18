@@ -249,7 +249,7 @@ export default function LeaveRequestPage() {
             let attachmentBase64: string | undefined = undefined;
             if (attachment) {
                 try {
-                    attachmentBase64 = await compressBase64Image(attachment, 640, 480, 0.6);
+                    attachmentBase64 = await compressBase64Image(attachment, 1280, 1280, 0.7);
                 } catch (e) {
                     console.error("Error compressing attachment:", e);
                     attachmentBase64 = attachment;
