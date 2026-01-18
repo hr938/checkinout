@@ -837,6 +837,7 @@ export interface SystemConfig {
     otMultiplier: number; // Normal OT (e.g. 1.5)
     otMultiplierHoliday: number; // Holiday/Weekend OT (e.g. 3.0)
     weeklyHolidays: number[]; // Days of week that are holidays (0=Sun, 6=Sat)
+    useIndividualHolidays?: boolean; // Use individual employee's weekly holidays instead of global setting
     lateDeductionType: "none" | "pro-rated" | "fixed_per_minute";
     lateDeductionRate: number; // Used if fixed_per_minute
     customHolidays: CustomHoliday[];

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { employeeService, type Employee } from "@/lib/firestore";
+import { employeeService, shiftService, type Employee, type Shift } from "@/lib/firestore";
 
 interface EmployeeFormModalProps {
     isOpen: boolean;
@@ -15,6 +15,7 @@ interface EmployeeFormModalProps {
 
 export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOnly = false }: EmployeeFormModalProps) {
     const [loading, setLoading] = useState(false);
+    const [shifts, setShifts] = useState<Shift[]>([]);
 
 
     const [formData, setFormData] = useState({
@@ -30,12 +31,23 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
         status: "ทำงาน" as "ทำงาน" | "ลาออก" | "พ้นสภาพ",
         endDate: undefined as Date | undefined,
         lineUserId: "",
+        weeklyHolidays: [0] as number[], // Default: วันอาทิตย์หยุด
+        shiftId: "" as string, // กะเวลา
         leaveQuota: {
             personal: 3,
             sick: 30,
             vacation: 5,
         },
     });
+
+    // Load shifts when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            shiftService.getAll()
+                .then(data => setShifts(data))
+                .catch(err => console.error("Error loading shifts:", err));
+        }
+    }, [isOpen]);
 
     // Update form when employee prop changes
     useEffect(() => {
@@ -53,6 +65,8 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                 status: employee.status || "ทำงาน",
                 endDate: employee.endDate,
                 lineUserId: employee.lineUserId || "",
+                weeklyHolidays: employee.weeklyHolidays || [0],
+                shiftId: employee.shiftId || "",
                 leaveQuota: {
                     personal: employee.leaveQuota?.personal || 3,
                     sick: employee.leaveQuota?.sick || 30,
@@ -74,6 +88,8 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                 status: "ทำงาน",
                 endDate: undefined,
                 lineUserId: "",
+                weeklyHolidays: [0],
+                shiftId: "",
                 leaveQuota: {
                     personal: 6,
                     sick: 30,
@@ -116,6 +132,8 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                 status: "ทำงาน",
                 endDate: undefined,
                 lineUserId: "",
+                weeklyHolidays: [0],
+                shiftId: "",
                 leaveQuota: {
                     personal: 6,
                     sick: 30,
@@ -306,6 +324,29 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                                 </select>
                             </div>
 
+                            {/* Shift Selection */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    กะเวลาทำงาน
+                                </label>
+                                <select
+                                    value={formData.shiftId}
+                                    onChange={(e) => setFormData({ ...formData, shiftId: e.target.value })}
+                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
+                                    disabled={readOnly}
+                                >
+                                    <option value="">-- ใช้เวลาทำงานหลัก --</option>
+                                    {shifts.map(shift => (
+                                        <option key={shift.id} value={shift.id}>
+                                            {shift.name} ({String(shift.checkInHour).padStart(2, '0')}:{String(shift.checkInMinute).padStart(2, '0')} - {String(shift.checkOutHour).padStart(2, '0')}:{String(shift.checkOutMinute).padStart(2, '0')})
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-gray-400 mt-1">
+                                    {formData.shiftId ? "ใช้เวลาตามกะที่เลือก" : "ใช้เวลาทำงานตามการตั้งค่าระบบ"}
+                                </p>
+                            </div>
+
                             {((formData.status as string) !== "ทำงาน" || formData.type === "ชั่วคราว") && (
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -365,6 +406,55 @@ export function EmployeeFormModal({ isOpen, onClose, employee, onSuccess, readOn
                             </div>
                         </div>
                     )}
+
+                    {/* Weekly Holidays - วันหยุดประจำสัปดาห์ */}
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-700">วันหยุดประจำสัปดาห์</h3>
+                        <p className="text-sm text-gray-500">เลือกวันที่พนักงานคนนี้หยุดประจำในแต่ละสัปดาห์</p>
+
+                        <div className="flex flex-wrap gap-2">
+                            {[
+                                { day: 0, label: "อา" },
+                                { day: 1, label: "จ" },
+                                { day: 2, label: "อ" },
+                                { day: 3, label: "พ" },
+                                { day: 4, label: "พฤ" },
+                                { day: 5, label: "ศ" },
+                                { day: 6, label: "ส" },
+                            ].map(({ day, label }) => {
+                                const isSelected = formData.weeklyHolidays.includes(day);
+                                return (
+                                    <button
+                                        key={day}
+                                        type="button"
+                                        onClick={() => {
+                                            if (readOnly) return;
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                weeklyHolidays: isSelected
+                                                    ? prev.weeklyHolidays.filter(d => d !== day)
+                                                    : [...prev.weeklyHolidays, day].sort()
+                                            }));
+                                        }}
+                                        disabled={readOnly}
+                                        className={`w-12 h-12 rounded-xl font-medium transition-all duration-200 ${isSelected
+                                            ? "bg-red-500 text-white shadow-lg shadow-red-200"
+                                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                            } ${readOnly ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                                    >
+                                        {label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <p className="text-xs text-gray-400">
+                            {formData.weeklyHolidays.length === 0
+                                ? "ไม่มีวันหยุดประจำสัปดาห์ (ทำงานทุกวัน)"
+                                : `หยุดสัปดาห์ละ ${formData.weeklyHolidays.length} วัน`
+                            }
+                        </p>
+                    </div>
 
                     {/* Leave Quota */}
                     <div className="space-y-4">

@@ -60,8 +60,6 @@ export default function DailySummaryPage() {
             setEmployees(activeEmployees);
             setAttendances(attData);
 
-            // Get weekly holidays from config (default to Sat, Sun if missing)
-            const weeklyHolidays = configData?.weeklyHolidays || [0, 6];
             const dateStr = format(date, "yyyy-MM-dd");
 
             // Filter approved swaps that affect the selected date
@@ -80,8 +78,16 @@ export default function DailySummaryPage() {
 
                 const hasCheckedIn = checkInRec || lateRec;
 
-                // Check if this day is a weekly holiday
-                const isWeeklyHoliday = weeklyHolidays.includes(date.getDay());
+                // Determine weekly holidays based on useIndividualHolidays setting
+                const useIndividualHolidays = configData?.useIndividualHolidays ?? false;
+                const globalHolidays = configData?.weeklyHolidays || [0, 6];
+                const employeeHolidays = emp.weeklyHolidays || globalHolidays; // Fallback to global if employee doesn't have
+
+                // Use individual or global based on setting
+                const applicableHolidays = useIndividualHolidays ? employeeHolidays : globalHolidays;
+
+                // Check if this day is a weekly holiday for this employee
+                const isWeeklyHoliday = applicableHolidays.includes(date.getDay());
 
                 // Check swap status for this employee on this date
                 const employeeSwaps = approvedSwaps.filter(s => s.employeeId === emp.id);

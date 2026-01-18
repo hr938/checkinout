@@ -4,7 +4,7 @@ import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { MapPin, Camera, RotateCcw, CheckCircle, Clock, AlertTriangle } from "lucide-react";
-import { attendanceService, systemConfigService } from "@/lib/firestore";
+import { attendanceService, systemConfigService, shiftService, type Shift } from "@/lib/firestore";
 import { isLate, getLateMinutes, isEligibleForOT, getOTMinutes, formatMinutesToHours } from "@/lib/workTime";
 import { useEmployee } from "@/contexts/EmployeeContext";
 import { EmployeeHeader } from "@/components/mobile/EmployeeHeader";
@@ -75,6 +75,7 @@ export default function CheckInPage() {
     const [workTimeEnabled, setWorkTimeEnabled] = useState(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [systemConfig, setSystemConfig] = useState<any>(null);
+    const [employeeShift, setEmployeeShift] = useState<Shift | null>(null);
     const [locationConfig, setLocationConfig] = useState<{
         enabled: boolean;
         latitude: number;
@@ -99,6 +100,17 @@ export default function CheckInPage() {
         if (employee?.id) {
             console.log("=== Employee Changed ===", employee.name);
             checkTodayStatus();
+            // Load employee's shift if they have one
+            if (employee.shiftId) {
+                shiftService.getById(employee.shiftId)
+                    .then(shift => {
+                        if (shift) {
+                            console.log("=== Employee Shift Loaded ===", shift.name);
+                            setEmployeeShift(shift);
+                        }
+                    })
+                    .catch(err => console.error("Error loading employee shift:", err));
+            }
         }
     }, [employee]);
 
@@ -280,7 +292,21 @@ export default function CheckInPage() {
     };
 
     const getEffectiveWorkTimeConfig = () => {
+        // 1. Priority: Use employee's assigned shift
+        if (employeeShift) {
+            console.log("Using employee shift:", employeeShift.name);
+            return {
+                checkInHour: employeeShift.checkInHour,
+                checkInMinute: employeeShift.checkInMinute,
+                checkOutHour: employeeShift.checkOutHour,
+                checkOutMinute: employeeShift.checkOutMinute,
+                lateGracePeriod: employeeShift.lateGracePeriod ?? 0
+            };
+        }
+
+        // 2. Fallback: Use system config
         if (systemConfig) {
+            console.log("Using system config (no employee shift)");
             return {
                 checkInHour: systemConfig.checkInHour ?? 9,
                 checkInMinute: systemConfig.checkInMinute ?? 0,

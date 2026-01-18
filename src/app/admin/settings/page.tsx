@@ -23,6 +23,7 @@ export default function SettingsPage() {
         otMultiplier: 1.5,
         otMultiplierHoliday: 3.0,
         weeklyHolidays: [0, 6], // Sun, Sat
+        useIndividualHolidays: false, // Use global holidays by default
         lateDeductionType: "pro-rated",
         lateDeductionRate: 0,
         requirePhoto: true,
@@ -122,6 +123,7 @@ export default function SettingsPage() {
                         otMultiplier: config.otMultiplier ?? 1.5,
                         otMultiplierHoliday: config.otMultiplierHoliday ?? 3.0,
                         weeklyHolidays: config.weeklyHolidays ?? [0, 6],
+                        useIndividualHolidays: config.useIndividualHolidays ?? false,
                         lateDeductionType: config.lateDeductionType ?? "pro-rated",
                         lateDeductionRate: config.lateDeductionRate ?? 0,
                         requirePhoto: config.requirePhoto ?? true,
@@ -294,6 +296,7 @@ export default function SettingsPage() {
             otMultiplier: 1.5,
             otMultiplierHoliday: 3.0,
             weeklyHolidays: [0, 6],
+            useIndividualHolidays: false,
             lateDeductionType: "pro-rated",
             lateDeductionRate: 0,
             requirePhoto: true,
@@ -912,7 +915,7 @@ export default function SettingsPage() {
                             </div>
                             <div className="flex flex-wrap gap-3">
                                 {["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"].map((day, index) => (
-                                    <label key={index} className="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-100">
+                                    <label key={index} className={`flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 ${settings.useIndividualHolidays ? 'opacity-50' : ''}`}>
                                         <input
                                             type="checkbox"
                                             checked={settings.weeklyHolidays?.includes(index) ?? false}
@@ -924,11 +927,63 @@ export default function SettingsPage() {
                                                     setSettings({ ...settings, weeklyHolidays: current.filter(d => d !== index) });
                                                 }
                                             }}
+                                            disabled={settings.useIndividualHolidays}
                                             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                         />
                                         <span className="text-sm text-gray-700">{day}</span>
                                     </label>
                                 ))}
+                            </div>
+
+                            {/* Toggle: Use Individual vs Global Holidays */}
+                            <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
+                                            <Users className="w-4 h-4 text-purple-600" />
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-800">โหมดวันหยุดพนักงาน</p>
+                                            <p className="text-xs text-gray-500">เลือกวิธีคำนวณวันหยุดสำหรับเงินเดือน</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, useIndividualHolidays: !settings.useIndividualHolidays })}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.useIndividualHolidays ? 'bg-purple-600' : 'bg-gray-300'}`}
+                                    >
+                                        <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.useIndividualHolidays ? 'translate-x-6' : 'translate-x-1'}`}
+                                        />
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className={`p-3 rounded-lg border-2 transition-all ${!settings.useIndividualHolidays ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'}`}>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-lg">🌐</span>
+                                            <span className={`font-medium ${!settings.useIndividualHolidays ? 'text-blue-700' : 'text-gray-600'}`}>
+                                                ใช้วันหยุดส่วนกลาง
+                                            </span>
+                                            {!settings.useIndividualHolidays && (
+                                                <span className="px-1.5 py-0.5 bg-blue-500 text-white text-[10px] rounded-full">ใช้งาน</span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-gray-500">ใช้วันหยุดที่กำหนดข้างบนกับพนักงานทุกคน</p>
+                                    </div>
+                                    <div className={`p-3 rounded-lg border-2 transition-all ${settings.useIndividualHolidays ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white'}`}>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-lg">👤</span>
+                                            <span className={`font-medium ${settings.useIndividualHolidays ? 'text-purple-700' : 'text-gray-600'}`}>
+                                                ใช้วันหยุดของแต่ละคน
+                                            </span>
+                                            {settings.useIndividualHolidays && (
+                                                <span className="px-1.5 py-0.5 bg-purple-500 text-white text-[10px] rounded-full">ใช้งาน</span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-gray-500">ใช้วันหยุดที่กำหนดในโปรไฟล์พนักงานแต่ละคน</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

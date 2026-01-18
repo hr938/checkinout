@@ -400,7 +400,8 @@ export default function PayrollPage() {
             // Use config values or defaults
             const otMultiplier = config?.otMultiplier ?? 1.5;
             const otMultiplierHoliday = config?.otMultiplierHoliday ?? 3.0;
-            const weeklyHolidays = config?.weeklyHolidays ?? [0, 6];
+            const globalHolidays = config?.weeklyHolidays ?? [0, 6];
+            const useIndividualHolidays = config?.useIndividualHolidays ?? false;
             const lateDeductionType = config?.lateDeductionType ?? "pro-rated";
             const lateDeductionRate = config?.lateDeductionRate ?? 0;
 
@@ -566,7 +567,11 @@ export default function PayrollPage() {
                             otPaySpecial += hours * hourlyRate * customHoliday.otMultiplier;
                         } else {
                             const dayOfWeek = ot.date.getDay();
-                            const isWeeklyHoliday = weeklyHolidays.includes(dayOfWeek);
+                            // Use individual or global holidays based on setting
+                            const applicableHolidays = useIndividualHolidays
+                                ? (emp.weeklyHolidays || globalHolidays)
+                                : globalHolidays;
+                            const isWeeklyHoliday = applicableHolidays.includes(dayOfWeek);
 
                             // Check swap status:
                             // - ถ้าเป็นวันที่อยู่ใน workDatesFromHoliday = วันหยุดที่สลับมาทำงาน → ถือเป็นวันทำงาน (OT ปกติ)

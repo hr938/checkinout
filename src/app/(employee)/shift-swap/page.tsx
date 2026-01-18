@@ -31,7 +31,14 @@ export default function SwapHolidayRequestPage() {
 
                 // Load system config for weekly holidays
                 const config = await systemConfigService.get();
-                if (config?.weeklyHolidays) {
+
+                // Determine which holidays to use based on useIndividualHolidays setting
+                const useIndividualHolidays = config?.useIndividualHolidays ?? false;
+                if (useIndividualHolidays && employee?.weeklyHolidays) {
+                    // Use employee's individual weekly holidays
+                    setWeeklyHolidays(employee.weeklyHolidays);
+                } else if (config?.weeklyHolidays) {
+                    // Use global weekly holidays
                     setWeeklyHolidays(config.weeklyHolidays);
                 }
 
