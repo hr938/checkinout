@@ -49,9 +49,11 @@ export default function CheckInPage() {
     };
 
     // Step 1 Data
-    const [checkInType, setCheckInType] = useState<"เข้างาน" | "ออกงาน" | "ออกนอกพื้นที่">("เข้างาน");
+    const [checkInType, setCheckInType] = useState<"เข้างาน" | "ออกงาน" | "ก่อนพัก" | "หลังพัก" | "ออกนอกพื้นที่">("เข้างาน");
     const [canCheckIn, setCanCheckIn] = useState(true);
     const [canCheckOut, setCanCheckOut] = useState(false);
+    const [canBreakOut, setCanBreakOut] = useState(false); // ก่อนพัก
+    const [canBreakIn, setCanBreakIn] = useState(false);   // หลังพัก
     const [canCheckOffsite, setCanCheckOffsite] = useState(false);
 
 
@@ -147,28 +149,52 @@ export default function CheckInPage() {
         try {
             const history = await attendanceService.getHistory(employee.id, todayStart, todayEnd);
 
-            const mainActions = history
-                .filter(h => h.status === "เข้างาน" || h.status === "ออกงาน" || h.status === "สาย")
+            // Get all actions sorted by time (newest first)
+            const allActions = history
+                .filter(h => ["เข้างาน", "ออกงาน", "สาย", "ก่อนพัก", "หลังพัก"].includes(h.status))
                 .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-            if (mainActions.length > 0) {
-                const lastAction = mainActions[0];
-                if (lastAction.status === "เข้างาน" || lastAction.status === "สาย") {
-                    setCanCheckIn(false);
-                    setCanCheckOut(true);
-                    setCanCheckOffsite(true);
-                    setCheckInType("ออกงาน");
-                } else {
-                    setCanCheckIn(true);
-                    setCanCheckOut(false);
-                    setCanCheckOffsite(false);
-                    setCheckInType("เข้างาน");
-                }
-            } else {
+            // Check main check-in/out status
+            const hasCheckedIn = allActions.some(a => a.status === "เข้างาน" || a.status === "สาย");
+            const hasCheckedOut = allActions.some(a => a.status === "ออกงาน");
+
+            // Check break status
+            const breakActions = allActions.filter(a => a.status === "ก่อนพัก" || a.status === "หลังพัก");
+            const lastBreakAction = breakActions.length > 0 ? breakActions[0] : null;
+            const isOnBreak = lastBreakAction?.status === "ก่อนพัก"; // ถ้าล่าสุดเป็นก่อนพัก = กำลังพักอยู่
+
+            if (!hasCheckedIn) {
+                // ยังไม่ได้เข้างาน - เปิดแค่เข้างาน
                 setCanCheckIn(true);
                 setCanCheckOut(false);
+                setCanBreakOut(false);
+                setCanBreakIn(false);
                 setCanCheckOffsite(false);
                 setCheckInType("เข้างาน");
+            } else if (hasCheckedOut) {
+                // ออกงานแล้ว - เปิดแค่เข้างานใหม่ (กะถัดไป)
+                setCanCheckIn(true);
+                setCanCheckOut(false);
+                setCanBreakOut(false);
+                setCanBreakIn(false);
+                setCanCheckOffsite(false);
+                setCheckInType("เข้างาน");
+            } else if (isOnBreak) {
+                // กำลังพักอยู่ - เปิดหลังพัก
+                setCanCheckIn(false);
+                setCanCheckOut(false);
+                setCanBreakOut(false);
+                setCanBreakIn(true);
+                setCanCheckOffsite(false);
+                setCheckInType("หลังพัก");
+            } else {
+                // เข้างานแล้ว ยังไม่ออก ไม่ได้พัก - เปิดออกงาน, ก่อนพัก, นอกพื้นที่
+                setCanCheckIn(false);
+                setCanCheckOut(true);
+                setCanBreakOut(true);
+                setCanBreakIn(false);
+                setCanCheckOffsite(true);
+                setCheckInType("ออกงาน");
             }
         } catch (error) {
             console.error("Error checking status:", error);
@@ -589,14 +615,57 @@ export default function CheckInPage() {
                 }
             }
 
+            // ตรวจสอบก่อนพัก
+            if (checkInType === "ก่อนพัก") {
+                const hasCheckedIn = mainActions.some(a => a.status === "เข้างาน" || a.status === "สาย");
+                const currentBreak = history.find(h => h.status === "ก่อนพัก");
+                // ต้องเข้างานก่อน และยังไม่ได้พัก (หรือพักเสร็จแล้วและจะพักอีกรอบ? ปกติพักเที่ยงรอบเดียว)
+                // ตรวจสอบว่ากำลังพักอยู่หรือไม่
+                const breakActions = history.filter(h => h.status === "ก่อนพัก" || h.status === "หลังพัก");
+                const lastBreakStatus = breakActions.length > 0 ? breakActions[0].status : null;
+
+                if (!hasCheckedIn) {
+                    showAlert("ยังไม่ได้เข้างาน", "กรุณาลงเวลาเข้างานก่อนพัก", "warning");
+                    setLoading(false);
+                    return;
+                }
+                if (lastBreakStatus === "ก่อนพัก") {
+                    showAlert("กำลังพักอยู่", "คุณได้บันทึกเวลาก่อนพักไปแล้ว กรุณาบันทึกหลังพัก", "warning");
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            // ตรวจสอบหลังพัก
+            if (checkInType === "หลังพัก") {
+                const breakActions = history.filter(h => h.status === "ก่อนพัก" || h.status === "หลังพัก");
+                const lastBreakStatus = breakActions.length > 0 ? breakActions[0].status : null;
+
+                if (lastBreakStatus !== "ก่อนพัก") {
+                    showAlert("ไม่พบข้อมูลก่อนพัก", "กรุณาบันทึกเวลาก่อนพักก่อน", "warning");
+                    setLoading(false);
+                    return;
+                }
+            }
+
             // ป้องกันออกงานซ้ำ
             if (checkInType === "ออกงาน") {
                 const checkInRecord = mainActions.find(a => a.status === "เข้างาน" || a.status === "สาย");
                 const hasCheckedOut = mainActions.some(a => a.status === "ออกงาน");
+
+                // ตรวจสอบว่าค้างสถานะพักอยู่หรือไม่
+                const breakActions = history.filter(h => h.status === "ก่อนพัก" || h.status === "หลังพัก");
+                const lastBreakStatus = breakActions.length > 0 ? breakActions[0].status : null;
+
                 if (!checkInRecord) {
                     showAlert("ยังไม่ได้เข้างาน", "กรุณาลงเวลาเข้างานก่อน", "warning");
                     setLoading(false);
                     await checkTodayStatus();
+                    return;
+                }
+                if (lastBreakStatus === "ก่อนพัก") {
+                    showAlert("กำลังพักอยู่", "กรุณาบันทึกเวลาหลังพักก่อนออกงาน", "warning");
+                    setLoading(false);
                     return;
                 }
                 if (hasCheckedOut) {
@@ -693,8 +762,12 @@ export default function CheckInPage() {
                 }
 
                 // Conditionally add optional fields
-                if (checkInType === "เข้างาน" || checkInType === "ออกนอกพื้นที่") {
+                if (checkInType === "เข้างาน" || checkInType === "ออกนอกพื้นที่" || checkInType === "หลังพัก") {
                     attendanceData.checkIn = now;
+                }
+
+                if (checkInType === "ก่อนพัก") {
+                    attendanceData.checkOut = now;
                 }
 
                 if (checkInType === "ออกงาน") {
@@ -796,7 +869,7 @@ export default function CheckInPage() {
                 </span>
             </div>
 
-            {/* Type Selection - 2 Columns */}
+            {/* Type Selection */}
             <div className="space-y-3">
                 {/* เข้างาน / ออกงาน */}
                 <div className="grid grid-cols-2 gap-3">
@@ -829,6 +902,36 @@ export default function CheckInPage() {
                     </button>
                 </div>
 
+                {/* ก่อนพัก / หลังพัก */}
+                <div className="grid grid-cols-2 gap-3">
+                    <button
+                        onClick={() => canBreakOut && setCheckInType("ก่อนพัก")}
+                        disabled={!canBreakOut}
+                        className={`p-4 rounded-2xl border transition-all font-bold text-base flex flex-col items-center gap-2 ${checkInType === "ก่อนพัก"
+                            ? "border-orange-500 bg-orange-50 text-orange-700 shadow-md ring-1 ring-orange-500"
+                            : canBreakOut
+                                ? "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                                : "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60"
+                            }`}
+                    >
+                        <div className={`w-4 h-4 rounded-full ${checkInType === "ก่อนพัก" ? "bg-orange-500" : "bg-gray-300"}`} />
+                        <span>ก่อนพัก</span>
+                    </button>
+
+                    <button
+                        onClick={() => canBreakIn && setCheckInType("หลังพัก")}
+                        disabled={!canBreakIn}
+                        className={`p-4 rounded-2xl border transition-all font-bold text-base flex flex-col items-center gap-2 ${checkInType === "หลังพัก"
+                            ? "border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500"
+                            : canBreakIn
+                                ? "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                                : "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60"
+                            }`}
+                    >
+                        <div className={`w-4 h-4 rounded-full ${checkInType === "หลังพัก" ? "bg-blue-500" : "bg-gray-300"}`} />
+                        <span>หลังพัก</span>
+                    </button>
+                </div>
 
                 {/* ออกนอกพื้นที่ */}
                 <div className="mt-3">
