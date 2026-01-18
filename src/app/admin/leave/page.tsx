@@ -6,7 +6,7 @@ import { StatsCard } from "@/components/dashboard/StatsCard";
 import { LeaveTable } from "@/components/leave/LeaveTable";
 import { LeaveFormModal } from "@/components/leave/LeaveFormModal";
 import { Button } from "@/components/ui/button";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Clock, CheckCircle, XCircle, FileText } from "lucide-react";
 import { leaveService, type LeaveRequest, employeeService, adminService } from "@/lib/firestore";
 import { sendPushMessage } from "@/app/actions/line";
 import { auth } from "@/lib/firebase";
@@ -250,30 +250,38 @@ export default function LeavePage() {
                 }
             />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <StatsCard
                     title="รอการอนุมัติ"
                     value={stats.pending}
+                    icon={<Clock className="w-5 h-5 text-orange-600" />}
                     onClick={() => setStatusFilter(statusFilter === "รออนุมัติ" ? "all" : "รออนุมัติ")}
                     isActive={statusFilter === "รออนุมัติ"}
+                    className="border-orange-100 bg-orange-50/50 hover:border-orange-200"
                 />
                 <StatsCard
-                    title="อนุมัติ"
+                    title="อนุมัติแล้ว"
                     value={stats.approved}
+                    icon={<CheckCircle className="w-5 h-5 text-green-600" />}
                     onClick={() => setStatusFilter(statusFilter === "อนุมัติ" ? "all" : "อนุมัติ")}
                     isActive={statusFilter === "อนุมัติ"}
+                    className="border-green-100 bg-green-50/50 hover:border-green-200"
                 />
                 <StatsCard
                     title="ไม่อนุมัติ"
                     value={stats.rejected}
+                    icon={<XCircle className="w-5 h-5 text-red-600" />}
                     onClick={() => setStatusFilter(statusFilter === "ไม่อนุมัติ" ? "all" : "ไม่อนุมัติ")}
                     isActive={statusFilter === "ไม่อนุมัติ"}
+                    className="border-red-100 bg-red-50/50 hover:border-red-200"
                 />
                 <StatsCard
                     title="ทั้งหมด"
                     value={stats.total}
+                    icon={<FileText className="w-5 h-5 text-blue-600" />}
                     onClick={() => setStatusFilter("all")}
                     isActive={statusFilter === "all"}
+                    className="border-blue-100 bg-blue-50/50 hover:border-blue-200"
                 />
             </div>
 
