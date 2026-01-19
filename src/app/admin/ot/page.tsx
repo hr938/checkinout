@@ -19,6 +19,16 @@ export default function OTPage() {
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [statusFilter, setStatusFilter] = useState<"all" | "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ">("all");
 
+    const [rejectModal, setRejectModal] = useState<{
+        isOpen: boolean;
+        otId: string | null;
+        reason: string;
+    }>({
+        isOpen: false,
+        otId: null,
+        reason: ""
+    });
+
     const loadOTRequests = async () => {
         try {
             // Fetch Pending and Recent (100) concurrently
@@ -84,8 +94,20 @@ export default function OTPage() {
     };
 
     const handleStatusUpdate = async (id: string, status: OTRequest["status"]) => {
+        if (status === "ไม่อนุมัติ") {
+            setRejectModal({
+                isOpen: true,
+                otId: id,
+                reason: ""
+            });
+            return;
+        }
+        await processStatusUpdate(id, status);
+    };
+
+    const processStatusUpdate = async (id: string, status: OTRequest["status"], rejectionReason?: string) => {
         try {
-            await otService.updateStatus(id, status);
+            await otService.updateStatus(id, status, rejectionReason);
 
             // Find the request and employee to send notification
             const request = otRequests.find(r => r.id === id);
@@ -103,6 +125,101 @@ export default function OTPage() {
                     const startTime = request.startTime instanceof Date ? request.startTime : new Date(request.startTime);
                     const endTime = request.endTime instanceof Date ? request.endTime : new Date(request.endTime);
                     const timeStr = `${startTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`;
+
+                    const flexContents: any[] = [
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            spacing: "sm",
+                            contents: [
+                                {
+                                    type: "text",
+                                    text: "วันที่",
+                                    color: "#aaaaaa",
+                                    size: "sm",
+                                    flex: 1
+                                },
+                                {
+                                    type: "text",
+                                    text: dateStr,
+                                    wrap: true,
+                                    color: "#666666",
+                                    size: "sm",
+                                    flex: 5
+                                }
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            spacing: "sm",
+                            contents: [
+                                {
+                                    type: "text",
+                                    text: "เวลา",
+                                    color: "#aaaaaa",
+                                    size: "sm",
+                                    flex: 1
+                                },
+                                {
+                                    type: "text",
+                                    text: timeStr,
+                                    wrap: true,
+                                    color: "#666666",
+                                    size: "sm",
+                                    flex: 5
+                                }
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            spacing: "sm",
+                            contents: [
+                                {
+                                    type: "text",
+                                    text: "สถานะ",
+                                    color: "#aaaaaa",
+                                    size: "sm",
+                                    flex: 1
+                                },
+                                {
+                                    type: "text",
+                                    text: status,
+                                    wrap: true,
+                                    color: color,
+                                    size: "sm",
+                                    flex: 5,
+                                    weight: "bold"
+                                }
+                            ]
+                        }
+                    ];
+
+                    if (rejectionReason) {
+                        flexContents.push({
+                            type: "box",
+                            layout: "baseline",
+                            spacing: "sm",
+                            contents: [
+                                {
+                                    type: "text",
+                                    text: "เหตุผล",
+                                    color: "#aaaaaa",
+                                    size: "sm",
+                                    flex: 1
+                                },
+                                {
+                                    type: "text",
+                                    text: rejectionReason,
+                                    wrap: true,
+                                    color: "#D32F2F",
+                                    size: "sm",
+                                    flex: 5
+                                }
+                            ]
+                        });
+                    }
 
                     await sendPushMessage(employee.lineUserId, [
                         {
@@ -132,75 +249,7 @@ export default function OTPage() {
                                             layout: "vertical",
                                             margin: "lg",
                                             spacing: "sm",
-                                            contents: [
-                                                {
-                                                    type: "box",
-                                                    layout: "baseline",
-                                                    spacing: "sm",
-                                                    contents: [
-                                                        {
-                                                            type: "text",
-                                                            text: "วันที่",
-                                                            color: "#aaaaaa",
-                                                            size: "sm",
-                                                            flex: 1
-                                                        },
-                                                        {
-                                                            type: "text",
-                                                            text: dateStr,
-                                                            wrap: true,
-                                                            color: "#666666",
-                                                            size: "sm",
-                                                            flex: 5
-                                                        }
-                                                    ]
-                                                },
-                                                {
-                                                    type: "box",
-                                                    layout: "baseline",
-                                                    spacing: "sm",
-                                                    contents: [
-                                                        {
-                                                            type: "text",
-                                                            text: "เวลา",
-                                                            color: "#aaaaaa",
-                                                            size: "sm",
-                                                            flex: 1
-                                                        },
-                                                        {
-                                                            type: "text",
-                                                            text: timeStr,
-                                                            wrap: true,
-                                                            color: "#666666",
-                                                            size: "sm",
-                                                            flex: 5
-                                                        }
-                                                    ]
-                                                },
-                                                {
-                                                    type: "box",
-                                                    layout: "baseline",
-                                                    spacing: "sm",
-                                                    contents: [
-                                                        {
-                                                            type: "text",
-                                                            text: "สถานะ",
-                                                            color: "#aaaaaa",
-                                                            size: "sm",
-                                                            flex: 1
-                                                        },
-                                                        {
-                                                            type: "text",
-                                                            text: status,
-                                                            wrap: true,
-                                                            color: color,
-                                                            size: "sm",
-                                                            flex: 5,
-                                                            weight: "bold"
-                                                        }
-                                                    ]
-                                                }
-                                            ]
+                                            contents: flexContents
                                         }
                                     ]
                                 }
@@ -214,6 +263,13 @@ export default function OTPage() {
         } catch (error) {
             console.error("Error updating status:", error);
             alert("เกิดข้อผิดพลาดในการอัพเดทสถานะ");
+        }
+    };
+
+    const handleConfirmReject = async () => {
+        if (rejectModal.otId) {
+            await processStatusUpdate(rejectModal.otId, "ไม่อนุมัติ", rejectModal.reason);
+            setRejectModal({ isOpen: false, otId: null, reason: "" });
         }
     };
 
@@ -300,6 +356,36 @@ export default function OTPage() {
                 ot={selectedOT}
                 onSuccess={handleSuccess}
             />
+
+            {/* Reject Reason Modal */}
+            {rejectModal.isOpen && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl animate-in fade-in zoom-in-95 duration-200">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">ระบุเหตุผลที่ไม่อนุมัติ (ไม่บังคับ)</h3>
+                        <textarea
+                            className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none text-sm transition-all resize-none h-32"
+                            placeholder="กรุณาระบุเหตุผล (ถ้ามี)..."
+                            value={rejectModal.reason}
+                            onChange={(e) => setRejectModal(prev => ({ ...prev, reason: e.target.value }))}
+                            autoFocus
+                        />
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => setRejectModal({ isOpen: false, otId: null, reason: "" })}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium transition-colors"
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                onClick={handleConfirmReject}
+                                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
+                            >
+                                ยืนยันไม่อนุมัติ
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

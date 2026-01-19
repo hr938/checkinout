@@ -15,6 +15,7 @@ interface AttendanceFormModalProps {
 export function AttendanceFormModal({ isOpen, onClose, attendance, onSuccess }: AttendanceFormModalProps) {
     const [loading, setLoading] = useState(false);
     const [employees, setEmployees] = useState<Employee[]>([]);
+    const [editId, setEditId] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         employeeId: "",
         employeeName: "",
@@ -41,6 +42,7 @@ export function AttendanceFormModal({ isOpen, onClose, attendance, onSuccess }: 
     // Update form when attendance prop changes
     useEffect(() => {
         if (attendance) {
+            setEditId(attendance.id || null);
             setFormData({
                 employeeId: attendance.employeeId || "",
                 employeeName: attendance.employeeName || "",
@@ -51,6 +53,7 @@ export function AttendanceFormModal({ isOpen, onClose, attendance, onSuccess }: 
                 location: attendance.location || "",
             });
         } else {
+            setEditId(null);
             // Set default to today
             const today = new Date().toISOString().split('T')[0];
             setFormData({
@@ -99,8 +102,8 @@ export function AttendanceFormModal({ isOpen, onClose, attendance, onSuccess }: 
                 location: formData.location,
             };
 
-            if (attendance?.id) {
-                await attendanceService.update(attendance.id, attendanceData);
+            if (editId) {
+                await attendanceService.update(editId, attendanceData);
             } else {
                 await attendanceService.create(attendanceData);
             }

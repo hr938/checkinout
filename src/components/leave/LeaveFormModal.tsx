@@ -157,201 +157,203 @@ export function LeaveFormModal({ isOpen, onClose, leave, onSuccess }: LeaveFormM
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
                 {/* Header */}
-                <div className="sticky top-0 bg-white border-b border-gray-100 p-6 flex items-center justify-between rounded-t-3xl">
-                    <h2 className="text-2xl font-bold text-gray-800">
+                <div className="sticky top-0 bg-white border-b border-gray-100 p-4 flex items-center justify-between rounded-t-2xl z-10">
+                    <h2 className="text-xl font-semibold text-gray-800">
                         {leave ? "แก้ไขการลางาน" : "เพิ่มการลางาน"}
                     </h2>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                        className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600"
                     >
-                        <X className="w-6 h-6 text-gray-500" />
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                <form onSubmit={handleSubmit} className="p-5 space-y-4">
                     {/* Employee Selection */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            เลือกพนักงาน <span className="text-red-500">*</span>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                            พนักงาน <span className="text-red-500">*</span>
                         </label>
                         <select
                             value={formData.employeeId}
                             onChange={(e) => handleEmployeeChange(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                             required
                             disabled={!!leave}
                         >
                             <option value="">-- เลือกพนักงาน --</option>
                             {employees.map((emp) => (
                                 <option key={emp.id} value={emp.id}>
-                                    {emp.name} ({emp.type})
+                                    {emp.name}
                                 </option>
                             ))}
                         </select>
                     </div>
 
-                    {/* Leave Type */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            ประเภทการลา <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                            value={formData.leaveType}
-                            onChange={(e) => setFormData({ ...formData, leaveType: e.target.value as any })}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent"
-                            required
-                        >
-                            <option value="ลาพักร้อน">ลาพักร้อน</option>
-                            <option value="ลาป่วย">ลาป่วย</option>
-                            <option value="ลากิจ">ลากิจ</option>
-                        </select>
+                    <div className="grid grid-cols-2 gap-4">
+                        {/* Leave Type */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                ประเภท <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                                value={formData.leaveType}
+                                onChange={(e) => setFormData({ ...formData, leaveType: e.target.value as any })}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                required
+                            >
+                                <option value="ลาพักร้อน">ลาพักร้อน</option>
+                                <option value="ลาป่วย">ลาป่วย</option>
+                                <option value="ลากิจ">ลากิจ</option>
+                            </select>
+                        </div>
+
+                        {/* Status */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                สถานะ
+                            </label>
+                            <select
+                                value={formData.status}
+                                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                <option value="รออนุมัติ">รออนุมัติ</option>
+                                <option value="อนุมัติ">อนุมัติ</option>
+                                <option value="ไม่อนุมัติ">ไม่อนุมัติ</option>
+                            </select>
+                        </div>
                     </div>
 
                     {/* Date Range */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                วันที่เริ่มต้น <span className="text-red-500">*</span>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                เริ่มต้น <span className="text-red-500">*</span>
                             </label>
                             <input
                                 type="date"
                                 value={formData.startDate}
                                 onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent"
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                 required
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                วันที่สิ้นสุด <span className="text-red-500">*</span>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                สิ้นสุด <span className="text-red-500">*</span>
                             </label>
                             <input
                                 type="date"
                                 value={formData.endDate}
                                 onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent"
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                 required
                                 min={formData.startDate}
                             />
                         </div>
                     </div>
 
-                    {/* Days Display */}
+                    {/* Days Display - Compact */}
                     {formData.startDate && formData.endDate && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                            <p className="text-sm text-blue-700">
-                                จำนวนวันลา: <span className="font-bold text-lg">{calculateDays()}</span> วัน
-                            </p>
+                        <div className="bg-blue-50/50 border border-blue-100 rounded-lg px-3 py-2 flex items-center justify-between">
+                            <span className="text-xs text-blue-600 font-medium">จำนวนวันลาทั้งหมด</span>
+                            <span className="text-sm font-bold text-blue-700">{calculateDays()} วัน</span>
                         </div>
                     )}
 
                     {/* Reason */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">
                             เหตุผล <span className="text-red-500">*</span>
                         </label>
                         <textarea
                             value={formData.reason}
                             onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
                             rows={3}
-                            placeholder="กรอกเหตุผลการลา"
+                            placeholder="ระบุเหตุผล..."
                             required
                         />
                     </div>
 
-                    {/* Attachment */}
+                    {/* Attachment - Compact */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            หลักฐานประกอบ (ถ้ามี)
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                            หลักฐาน
                         </label>
-                        <div className="flex items-start gap-4">
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={handleFileChange}
-                                accept="image/*"
-                                className="hidden"
-                            />
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            accept="image/*"
+                            className="hidden"
+                        />
 
-                            {formData.attachment ? (
-                                <div className="relative group">
-                                    <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-200">
-                                        <img
-                                            src={formData.attachment}
-                                            alt="Evidence"
-                                            className="w-full h-full object-cover"
-                                        />
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="mt-2 text-xs text-blue-600 hover:underline flex items-center gap-1"
-                                    >
-                                        <Camera className="w-3 h-3" />
-                                        เปลี่ยนรูป
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData({ ...formData, attachment: null })}
-                                        className="mt-1 text-xs text-red-600 hover:underline"
-                                    >
-                                        ลบรูป
-                                    </button>
+                        {formData.attachment ? (
+                            <div className="flex items-center gap-3 p-2 border border-gray-200 rounded-lg bg-gray-50">
+                                <div className="w-12 h-12 rounded overflow-hidden flex-shrink-0 border border-gray-200">
+                                    <img
+                                        src={formData.attachment}
+                                        alt="Evidence"
+                                        className="w-full h-full object-cover"
+                                    />
                                 </div>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="w-full h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center text-gray-500 hover:border-gray-400 hover:bg-gray-50 transition-colors"
-                                >
-                                    <Camera className="w-8 h-8 mb-2 text-gray-400" />
-                                    <span className="text-sm">คลิกเพื่อแนบรูปภาพ</span>
-                                    <span className="text-xs text-gray-400 mt-1">สูงสุด 5MB</span>
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Status */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            สถานะ
-                        </label>
-                        <select
-                            value={formData.status}
-                            onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBDACA] focus:border-transparent"
-                        >
-                            <option value="รอการอนุมัติ">รอการอนุมัติ</option>
-                            <option value="อนุมัติ">อนุมัติ</option>
-                            <option value="ไม่อนุมัติ">ไม่อนุมัติ</option>
-                        </select>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-gray-700 truncate">แนบรูปภาพแล้ว</p>
+                                    <div className="flex items-center gap-3 mt-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="text-[10px] text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                                        >
+                                            <Camera className="w-3 h-3" /> เปลี่ยน
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, attachment: null })}
+                                            className="text-[10px] text-red-600 hover:text-red-700 font-medium"
+                                        >
+                                            ลบ
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-full py-2 px-3 border border-dashed border-gray-300 rounded-lg flex items-center justify-center gap-2 text-gray-500 hover:border-gray-400 hover:bg-gray-50 transition-colors bg-white"
+                            >
+                                <Camera className="w-4 h-4" />
+                                <span className="text-xs">คลิกเพื่อแนบรูปภาพ</span>
+                            </button>
+                        )}
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-3 pt-4">
+                    <div className="flex gap-3 pt-2">
                         <Button
                             type="button"
                             onClick={onClose}
                             variant="outline"
-                            className="flex-1 h-12 rounded-xl"
+                            className="flex-1 h-10 text-sm"
                             disabled={loading}
                         >
                             ยกเลิก
                         </Button>
                         <Button
                             type="submit"
-                            className="flex-1 h-12 bg-primary-dark hover:bg-primary-dark/90 text-white rounded-xl"
+                            className="flex-1 h-10 bg-green-600 hover:bg-green-700 text-white text-sm"
                             disabled={loading}
                         >
-                            {loading ? "กำลังบันทึก..." : leave ? "บันทึกการแก้ไข" : "เพิ่มการลางาน"}
+                            {loading ? "กำลังบันทึก..." : "บันทึก"}
                         </Button>
                     </div>
                 </form>

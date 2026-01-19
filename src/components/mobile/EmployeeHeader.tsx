@@ -14,9 +14,10 @@ export function EmployeeHeader() {
     const pathname = usePathname();
     const router = useRouter();
     const isHomePage = pathname === "/";
-    const [currentTime, setCurrentTime] = useState(new Date());
+    const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
     useEffect(() => {
+        setCurrentTime(new Date());
         const timer = setInterval(() => {
             setCurrentTime(new Date());
         }, 1000);
@@ -80,10 +81,10 @@ export function EmployeeHeader() {
                     {/* Right Side: Time */}
                     <div className="text-right">
                         <div className="text-2xl font-bold tracking-tight leading-none">
-                            {format(currentTime, "HH:mm")}
+                            {currentTime ? format(currentTime, "HH:mm") : "--:--"}
                         </div>
                         <div className="text-[10px] text-blue-100 font-medium mt-0.5 opacity-80">
-                            {format(currentTime, "d MMM yy", { locale: th })}
+                            {currentTime ? format(currentTime, "d MMM yy", { locale: th }) : "-"}
                         </div>
                     </div>
                 </div>

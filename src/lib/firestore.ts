@@ -74,6 +74,7 @@ export interface LeaveRequest {
     status: "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ";
     createdAt: Date;
     attachment?: string; // รูปภาพหลักฐาน (Base64)
+    rejectionReason?: string; // เหตุผลที่ไม่อนุมัติ
 }
 
 // OT Request types
@@ -87,6 +88,7 @@ export interface OTRequest {
     reason: string;
     status: "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ";
     createdAt: Date;
+    rejectionReason?: string; // เหตุผลที่ไม่อนุมัติ
 }
 
 // Swap Holiday Request types (ขอสลับวันหยุด)
@@ -99,6 +101,7 @@ export interface SwapRequest {
     reason: string;
     status: "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ";
     createdAt: Date;
+    rejectionReason?: string; // เหตุผลที่ไม่อนุมัติ
 }
 
 // Work Shift types (กะเวลาทำงาน)
@@ -439,9 +442,13 @@ export const leaveService = {
         })) as LeaveRequest[];
     },
 
-    async updateStatus(id: string, status: LeaveRequest["status"]) {
+    async updateStatus(id: string, status: LeaveRequest["status"], rejectionReason?: string) {
         const docRef = doc(db, "leaveRequests", id);
-        await updateDoc(docRef, { status });
+        const data: any = { status };
+        if (rejectionReason) {
+            data.rejectionReason = rejectionReason;
+        }
+        await updateDoc(docRef, data);
     },
 
     async update(id: string, leave: Partial<Omit<LeaveRequest, "id">>) {
@@ -584,9 +591,13 @@ export const otService = {
         })) as OTRequest[];
     },
 
-    async updateStatus(id: string, status: OTRequest["status"]) {
+    async updateStatus(id: string, status: OTRequest["status"], rejectionReason?: string) {
         const docRef = doc(db, "otRequests", id);
-        await updateDoc(docRef, { status });
+        const data: any = { status };
+        if (rejectionReason) {
+            data.rejectionReason = rejectionReason;
+        }
+        await updateDoc(docRef, data);
     },
 
     async update(id: string, ot: Partial<Omit<OTRequest, "id">>) {
@@ -675,9 +686,14 @@ export const swapService = {
         })) as SwapRequest[];
     },
 
-    async updateStatus(id: string, status: SwapRequest["status"]) {
+    async updateStatus(id: string, status: SwapRequest["status"], rejectionReason?: string) {
         const docRef = doc(db, "swapRequests", id);
-        await updateDoc(docRef, { status });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data: any = { status };
+        if (rejectionReason) {
+            data.rejectionReason = rejectionReason;
+        }
+        await updateDoc(docRef, data);
     },
 
     async delete(id: string) {

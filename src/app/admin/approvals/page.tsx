@@ -26,6 +26,19 @@ export default function ApprovalsPage() {
         message: "",
         type: "info"
     });
+    const [rejectModal, setRejectModal] = useState<{
+        isOpen: boolean;
+        type: "leave" | "ot" | "swap";
+        id: string | null;
+        action: "approve" | "reject";
+        reason: string;
+    }>({
+        isOpen: false,
+        type: "leave",
+        id: null,
+        action: "reject",
+        reason: ""
+    });
 
     const fetchData = async () => {
         setLoading(true);
@@ -51,97 +64,39 @@ export default function ApprovalsPage() {
         fetchData();
     }, []);
 
-    const handleApproveLeave = async (id: string) => {
-        if (!confirm("ยืนยันการอนุมัติ?")) return;
-        try {
-            await leaveService.updateStatus(id, "อนุมัติ");
-            fetchData();
-        } catch (error) {
-            console.error(error);
-            setAlertState({
-                isOpen: true,
-                title: "ผิดพลาด",
-                message: "เกิดข้อผิดพลาด",
-                type: "error"
-            });
-        }
+    const handleAction = (type: "leave" | "ot" | "swap", id: string, action: "approve" | "reject") => {
+        setRejectModal({
+            isOpen: true,
+            type,
+            id,
+            action,
+            reason: ""
+        });
     };
 
-    const handleRejectLeave = async (id: string) => {
-        if (!confirm("ยืนยันการปฏิเสธ?")) return;
-        try {
-            await leaveService.updateStatus(id, "ไม่อนุมัติ");
-            fetchData();
-        } catch (error) {
-            console.error(error);
-            setAlertState({
-                isOpen: true,
-                title: "ผิดพลาด",
-                message: "เกิดข้อผิดพลาด",
-                type: "error"
-            });
-        }
-    };
+    const handleConfirmAction = async () => {
+        if (!rejectModal.id) return;
 
-    const handleApproveOT = async (id: string) => {
-        if (!confirm("ยืนยันการอนุมัติ?")) return;
         try {
-            await otService.updateStatus(id, "อนุมัติ");
-            fetchData();
-        } catch (error) {
-            console.error(error);
-            setAlertState({
-                isOpen: true,
-                title: "ผิดพลาด",
-                message: "เกิดข้อผิดพลาด",
-                type: "error"
-            });
-        }
-    };
+            const { type, id, action, reason } = rejectModal;
+            const status = action === "approve" ? "อนุมัติ" : "ไม่อนุมัติ";
 
-    const handleRejectOT = async (id: string) => {
-        if (!confirm("ยืนยันการปฏิเสธ?")) return;
-        try {
-            await otService.updateStatus(id, "ไม่อนุมัติ");
-            fetchData();
-        } catch (error) {
-            console.error(error);
-            setAlertState({
-                isOpen: true,
-                title: "ผิดพลาด",
-                message: "เกิดข้อผิดพลาด",
-                type: "error"
-            });
-        }
-    };
+            if (type === "leave") {
+                await leaveService.updateStatus(id!, status, reason);
+            } else if (type === "ot") {
+                await otService.updateStatus(id!, status, reason);
+            } else if (type === "swap") {
+                await swapService.updateStatus(id!, status, reason); // Ensure swapService supports reason if needed
+            }
 
-    const handleApproveSwap = async (id: string) => {
-        if (!confirm("ยืนยันการอนุมัติ?")) return;
-        try {
-            await swapService.updateStatus(id, "อนุมัติ");
+            setRejectModal(prev => ({ ...prev, isOpen: false }));
             fetchData();
         } catch (error) {
-            console.error(error);
+            console.error("Error updating status:", error);
             setAlertState({
                 isOpen: true,
                 title: "ผิดพลาด",
-                message: "เกิดข้อผิดพลาด",
-                type: "error"
-            });
-        }
-    };
-
-    const handleRejectSwap = async (id: string) => {
-        if (!confirm("ยืนยันการปฏิเสธ?")) return;
-        try {
-            await swapService.updateStatus(id, "ไม่อนุมัติ");
-            fetchData();
-        } catch (error) {
-            console.error(error);
-            setAlertState({
-                isOpen: true,
-                title: "ผิดพลาด",
-                message: "เกิดข้อผิดพลาด",
+                message: "เกิดข้อผิดพลาดในการอัพเดทสถานะ",
                 type: "error"
             });
         }
@@ -242,14 +197,14 @@ export default function ApprovalsPage() {
                                         </div>
                                         <div className="flex gap-2 w-full md:w-auto">
                                             <button
-                                                onClick={() => handleApproveLeave(req.id!)}
+                                                onClick={() => handleAction("leave", req.id!, "approve")}
                                                 className="flex-1 md:flex-none px-4 py-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                                             >
                                                 <CheckCircle className="w-4 h-4" />
                                                 อนุมัติ
                                             </button>
                                             <button
-                                                onClick={() => handleRejectLeave(req.id!)}
+                                                onClick={() => handleAction("leave", req.id!, "reject")}
                                                 className="flex-1 md:flex-none px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                                             >
                                                 <XCircle className="w-4 h-4" />
@@ -292,14 +247,14 @@ export default function ApprovalsPage() {
                                         </div>
                                         <div className="flex gap-2 w-full md:w-auto">
                                             <button
-                                                onClick={() => handleApproveOT(req.id!)}
+                                                onClick={() => handleAction("ot", req.id!, "approve")}
                                                 className="flex-1 md:flex-none px-4 py-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                                             >
                                                 <CheckCircle className="w-4 h-4" />
                                                 อนุมัติ
                                             </button>
                                             <button
-                                                onClick={() => handleRejectOT(req.id!)}
+                                                onClick={() => handleAction("ot", req.id!, "reject")}
                                                 className="flex-1 md:flex-none px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                                             >
                                                 <XCircle className="w-4 h-4" />
@@ -351,14 +306,14 @@ export default function ApprovalsPage() {
                                         </div>
                                         <div className="flex gap-2 w-full md:w-auto">
                                             <button
-                                                onClick={() => handleApproveSwap(req.id!)}
+                                                onClick={() => handleAction("swap", req.id!, "approve")}
                                                 className="flex-1 md:flex-none px-4 py-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                                             >
                                                 <CheckCircle className="w-4 h-4" />
                                                 อนุมัติ
                                             </button>
                                             <button
-                                                onClick={() => handleRejectSwap(req.id!)}
+                                                onClick={() => handleAction("swap", req.id!, "reject")}
                                                 className="flex-1 md:flex-none px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                                             >
                                                 <XCircle className="w-4 h-4" />
@@ -380,6 +335,44 @@ export default function ApprovalsPage() {
                 message={alertState.message}
                 type={alertState.type}
             />
+
+            {/* Reject/Approve Reason Modal */}
+            {rejectModal.isOpen && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl animate-in fade-in zoom-in-95 duration-200">
+                        <h3 className={`text-lg font-bold mb-4 ${rejectModal.action === "approve" ? "text-green-600" : "text-red-600"}`}>
+                            {rejectModal.action === "approve" ? "ยืนยันการอนุมัติ" : "ยืนยันการไม่อนุมัติ"}
+                        </h3>
+                        <p className="text-sm text-gray-500 mb-2">
+                            คุณสามารถระบุเหตุผลเพิ่มเติมได้ (ไม่บังคับ)
+                        </p>
+                        <textarea
+                            className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm transition-all resize-none h-32"
+                            placeholder="ระบุเหตุผล..."
+                            value={rejectModal.reason}
+                            onChange={(e) => setRejectModal(prev => ({ ...prev, reason: e.target.value }))}
+                            autoFocus
+                        />
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => setRejectModal(prev => ({ ...prev, isOpen: false }))}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium transition-colors"
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                onClick={handleConfirmAction}
+                                className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors shadow-lg ${rejectModal.action === "approve"
+                                    ? "bg-green-600 hover:bg-green-700 shadow-green-200"
+                                    : "bg-red-600 hover:bg-red-700 shadow-red-200"
+                                    }`}
+                            >
+                                ยืนยัน
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Image Preview Modal */}
             {viewingImage && (

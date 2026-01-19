@@ -7,10 +7,10 @@ import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { EmployeeHeader } from "@/components/mobile/EmployeeHeader";
 import { useEmployee } from "@/contexts/EmployeeContext";
-import { Calendar, Clock, MapPin, FileText, Clock as ClockIcon } from "lucide-react";
+import { Calendar, Clock, MapPin, FileText, Clock as ClockIcon, UserX } from "lucide-react";
 
 export default function HistoryPage() {
-    const { employee } = useEmployee();
+    const { employee, loading: employeeLoading } = useEmployee();
     const [activeTab, setActiveTab] = useState<"attendance" | "leave" | "ot" | "swap">("attendance");
 
     const [attendance, setAttendance] = useState<Attendance[]>([]);
@@ -55,8 +55,11 @@ export default function HistoryPage() {
 
         if (employee) {
             fetchData();
+        } else if (!employeeLoading) {
+            // If employee loading is done but no employee found, stop loading
+            setLoading(false);
         }
-    }, [employee]);
+    }, [employee, employeeLoading]);
 
     const handleLoadMore = async () => {
         if (!employee?.id || !lastDoc || loadingMore) return;
@@ -92,6 +95,27 @@ export default function HistoryPage() {
             default: return "bg-gray-500";
         }
     };
+
+    if (!employee && !employeeLoading) {
+        return (
+            <div className="min-h-screen bg-gray-50 pb-10">
+                <EmployeeHeader />
+                <main className="px-6 -mt-6 relative z-10">
+                    <div className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100 text-center">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <UserX className="w-8 h-8 text-gray-400" />
+                        </div>
+                        <h2 className="text-lg font-bold text-gray-800 mb-2">ไม่พบข้อมูลพนักงาน</h2>
+                        <p className="text-gray-500 text-sm mb-6">
+                            คุณยังไม่ได้ลงทะเบียนในระบบ
+                            <br />
+                            กรุณาติดต่อผู้ดูแลระบบเพื่อลงทะเบียนใช้งาน
+                        </p>
+                    </div>
+                </main>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 pb-10">

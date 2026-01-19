@@ -112,109 +112,97 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
             {/* Mobile Backdrop */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                    className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm"
                     onClick={onClose}
                 />
             )}
 
             <aside className={cn(
-                "fixed inset-y-0 left-0 z-50 w-64 bg-primary flex flex-col border-r border-gray-200 transition-transform duration-300 ease-in-out",
+                "fixed inset-y-0 left-0 z-50 w-72 bg-gradient-to-b from-[#008033] to-[#004d1f] flex flex-col shadow-xl transition-transform duration-300 ease-in-out font-sans",
                 isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
             )}>
+                {/* Decorative Elements */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full -ml-16 -mb-16 blur-2xl pointer-events-none" />
+
                 {/* Profile Section */}
-                <div className="p-6 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden relative">
-                            <div className="w-full h-full bg-emerald-600 flex items-center justify-center text-white font-bold">
-                                {adminProfile?.name?.charAt(0) || "A"}
-                            </div>
+                <div className="relative z-10 px-6 py-8">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-white font-bold shadow-lg text-xl">
+                            {adminProfile?.name?.charAt(0) || "A"}
                         </div>
-                        <div>
-                            <p className="text-xs text-gray-500">ยินดีต้อนรับ,</p>
-                            <p className="font-bold text-gray-800 truncate max-w-[100px]">{adminProfile?.name || "Admin"}</p>
-                            <p className="text-[10px] text-gray-400 uppercase tracking-wider">{adminProfile?.role || "Guest"}</p>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-white font-bold text-lg truncate tracking-tight">
+                                {adminProfile?.name || "Admin"}
+                            </p>
+                            <p className="text-blue-100/80 text-xs font-medium uppercase tracking-wider">
+                                {adminProfile?.role || "Administrator"}
+                            </p>
                         </div>
+                        <Link
+                            href="/admin/settings"
+                            className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+                            onClick={onClose}
+                        >
+                            <Settings className="w-5 h-5" />
+                        </Link>
                     </div>
-                    <Link
-                        href="/admin/settings"
-                        className="p-2 bg-white rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
-                        title="ตั้งค่า"
-                        onClick={onClose}
-                    >
-                        <Settings className="w-4 h-4 text-gray-500" />
-                    </Link>
                 </div>
 
                 {/* Menu Groups */}
-                <nav className="flex-1 px-3 py-2 overflow-y-auto">
+                <nav className="flex-1 px-4 overflow-y-auto space-y-6 relative z-10">
                     {menuGroups.map((group) => {
-                        const isOpen = openGroups.includes(group.title);
+                        const isExpanded = openGroups.includes(group.title);
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         const groupActive = isGroupActive(group);
 
                         return (
-                            <div key={group.title} className="mb-2">
-                                {/* Group Header */}
-                                <button
-                                    onClick={() => toggleGroup(group.title)}
-                                    className={cn(
-                                        "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                                        groupActive
-                                            ? "text-emerald-800 bg-white/30"
-                                            : "text-emerald-900/70 hover:bg-white/20"
-                                    )}
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <group.icon className="w-4 h-4" />
-                                        <span>{group.title}</span>
-                                    </div>
-                                    <ChevronDown className={cn(
-                                        "w-4 h-4 transition-transform",
-                                        isOpen ? "rotate-180" : ""
-                                    )} />
-                                </button>
+                            <div key={group.title}>
+                                <div className="px-3 mb-2 flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-white/60 uppercase tracking-widest">
+                                        {group.title}
+                                    </span>
+                                </div>
 
-                                {/* Group Items */}
-                                {isOpen && (
-                                    <div className="mt-1 ml-3 space-y-0.5">
-                                        {group.items.map((item) => {
-                                            const isActive = pathname === item.href;
-                                            return (
-                                                <Link
-                                                    key={item.href}
-                                                    href={item.href}
-                                                    onClick={onClose}
-                                                    className={cn(
-                                                        "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
-                                                        isActive
-                                                            ? "bg-white text-emerald-900 shadow-sm font-medium"
-                                                            : "text-emerald-900/60 hover:bg-white/50 hover:text-emerald-900"
-                                                    )}
-                                                >
-                                                    <item.icon className={cn("w-4 h-4", isActive ? "text-emerald-600" : "")} />
-                                                    {item.label}
-                                                </Link>
-                                            );
-                                        })}
-                                    </div>
-                                )}
+                                <div className="space-y-1">
+                                    {group.items.map((item) => {
+                                        const isActive = pathname === item.href;
+                                        return (
+                                            <Link
+                                                key={item.href}
+                                                href={item.href}
+                                                onClick={onClose}
+                                                className={cn(
+                                                    "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group relative overflow-hidden",
+                                                    isActive
+                                                        ? "bg-white text-[#00BF4D] shadow-lg shadow-black/5"
+                                                        : "text-white/80 hover:bg-white/10 hover:text-white"
+                                                )}
+                                            >
+                                                <item.icon className={cn(
+                                                    "w-4.5 h-4.5 transition-colors",
+                                                    isActive ? "text-[#00BF4D]" : "text-white/70 group-hover:text-white"
+                                                )} />
+                                                <span className="relative z-10">{item.label}</span>
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         );
                     })}
                 </nav>
 
                 {/* Bottom Actions */}
-                <div className="p-4 space-y-1 border-t border-gray-200/50">
-                    <button className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-500 hover:text-gray-900 hover:bg-white/50 rounded-xl transition-colors">
-                        <HelpCircle className="w-5 h-5 text-gray-400" />
-                        ช่วยเหลือ
-                    </button>
+                <div className="p-4 relative z-10 mt-auto">
                     <button
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-white/90 bg-green-900 hover:bg-red-800 "
                     >
-                        <LogOut className="w-5 h-5 text-gray-400" />
+                        <LogOut className="w-4 h-4" />
                         ออกจากระบบ
                     </button>
+                    <p className="text-[10px] text-center text-white/40 mt-4 font-medium">v1.2.0 Check-In System</p>
                 </div>
             </aside>
         </>

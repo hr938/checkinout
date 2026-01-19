@@ -23,6 +23,7 @@ export default function DashboardPage() {
     const [locationEnabled, setLocationEnabled] = useState(false);
     const [workTimeEnabled, setWorkTimeEnabled] = useState(true);
     const [statusFilter, setStatusFilter] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
     const [alertState, setAlertState] = useState<{
         isOpen: boolean;
         title: string;
@@ -145,17 +146,24 @@ export default function DashboardPage() {
     };
 
     // Filter attendances
-    const filteredAttendances = statusFilter
-        ? attendances.filter(a => {
-            if (statusFilter === "เข้างาน") return a.status === "เข้างาน" || a.status === "สาย";
-            if (statusFilter === "ออกงาน") return a.status === "ออกงาน";
-            if (statusFilter === "สาย") return a.status === "สาย";
-            if (statusFilter === "ก่อนพัก") return a.status === "ก่อนพัก";
-            if (statusFilter === "หลังพัก") return a.status === "หลังพัก";
-            if (statusFilter === "นอกพื้นที่") return a.status === "ออกนอกพื้นที่ขาไป" || a.status === "ออกนอกพื้นที่ขากลับ";
-            return true;
-        })
-        : attendances;
+    const filteredAttendances = attendances.filter(a => {
+        // Filter by status
+        if (statusFilter) {
+            if (statusFilter === "เข้างาน" && !(a.status === "เข้างาน" || a.status === "สาย")) return false;
+            if (statusFilter === "ออกงาน" && a.status !== "ออกงาน") return false;
+            if (statusFilter === "สาย" && a.status !== "สาย") return false;
+            if (statusFilter === "ก่อนพัก" && a.status !== "ก่อนพัก") return false;
+            if (statusFilter === "หลังพัก" && a.status !== "หลังพัก") return false;
+            if (statusFilter === "นอกพื้นที่" && !(a.status === "ออกนอกพื้นที่ขาไป" || a.status === "ออกนอกพื้นที่ขากลับ")) return false;
+        }
+
+        // Filter by search query (employee name)
+        if (searchQuery) {
+            return a.employeeName.toLowerCase().includes(searchQuery.toLowerCase());
+        }
+
+        return true;
+    });
 
     return (
         <div>
@@ -163,6 +171,7 @@ export default function DashboardPage() {
                 title="บันทึก"
                 subtitle={`${attendances.length} results found`}
                 searchPlaceholder="Employee |"
+                onSearch={setSearchQuery}
                 action={
                     <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                         <div className="relative w-full sm:w-auto">

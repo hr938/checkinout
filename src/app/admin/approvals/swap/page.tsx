@@ -131,73 +131,93 @@ export default function SwapApprovalsPage() {
             ) : (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                     <table className="w-full">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">พนักงาน</th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">มาทำวันที่</th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">หยุดแทนวันที่</th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">เหตุผล</th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">สถานะ</th>
-                                <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">จัดการ</th>
+                        <thead>
+                            <tr className="bg-gray-50/50 border-b border-gray-100 text-left">
+                                <th className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider w-[25%]">ชื่อ-นามสกุล</th>
+                                <th className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider w-[25%]">รายละเอียดการสลับ</th>
+                                <th className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider w-[25%]">เหตุผล</th>
+                                <th className="py-4 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center w-[15%]">สถานะ</th>
+                                <th className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right w-[10%]">จัดการ</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-gray-50">
                             {filteredRequests.map(request => (
-                                <tr key={request.id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4">
+                                <tr key={request.id} className="hover:bg-gray-50/40 transition-colors group">
+                                    <td className="py-4 px-6">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                                                <ArrowLeftRight className="w-5 h-5 text-purple-600" />
+                                            <div className="w-9 h-9 rounded-full bg-purple-50 flex items-center justify-center text-purple-600 font-bold text-sm border border-purple-100">
+                                                {request.employeeName.charAt(0)}
                                             </div>
-                                            <span className="font-medium text-gray-800">{request.employeeName}</span>
+                                            <div>
+                                                <div className="text-sm font-semibold text-gray-900">{request.employeeName}</div>
+                                            </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4">
-                                        <span className="px-2 py-1 bg-green-50 text-green-700 rounded text-sm">
-                                            {format(new Date(request.workDate), "d MMM yyyy", { locale: th })}
+                                    <td className="py-4 px-6">
+                                        <div className="flex flex-col gap-1.5">
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <span className="w-16 text-gray-500">มาทำวันที่:</span>
+                                                <span className="font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-100">
+                                                    {format(new Date(request.workDate), "d MMM yy", { locale: th })}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <span className="w-16 text-gray-500">หยุดแทน:</span>
+                                                <span className="font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-100">
+                                                    {format(new Date(request.holidayDate), "d MMM yy", { locale: th })}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="py-4 px-6">
+                                        <div className="max-w-[200px] relative group/tooltip">
+                                            <p className="text-sm text-gray-600 truncate cursor-help">
+                                                {request.reason || "-"}
+                                            </p>
+                                            {request.reason && request.reason.length > 30 && (
+                                                <div className="absolute left-0 bottom-full mb-2 hidden group-hover/tooltip:block z-20 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg pointer-events-none">
+                                                    {request.reason}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="py-4 px-4 text-center">
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold
+                                            ${request.status === "รออนุมัติ" ? "bg-orange-100 text-orange-700" :
+                                                request.status === "อนุมัติ" ? "bg-green-100 text-green-700" :
+                                                    "bg-red-100 text-red-700"}`}>
+                                            {request.status}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4">
-                                        <span className="px-2 py-1 bg-red-50 text-red-700 rounded text-sm">
-                                            {format(new Date(request.holidayDate), "d MMM yyyy", { locale: th })}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-gray-600 max-w-[200px] truncate">
-                                        {request.reason || "-"}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {getStatusBadge(request.status)}
-                                    </td>
-                                    <td className="px-6 py-4">
+                                    <td className="py-4 px-6 text-right">
                                         {request.status === "รออนุมัติ" ? (
-                                            <div className="flex justify-center gap-2">
-                                                <Button
-                                                    size="sm"
+                                            <div className="flex items-center justify-end gap-1">
+                                                <button
                                                     onClick={() => request.id && handleApprove(request.id)}
                                                     disabled={processing === request.id}
-                                                    className="bg-green-600 hover:bg-green-700 h-8"
+                                                    className="p-1.5 hover:bg-green-50 text-gray-400 hover:text-green-600 rounded-lg transition-colors border border-transparent hover:border-green-200"
+                                                    title="อนุมัติ"
                                                 >
                                                     <Check className="w-4 h-4" />
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
+                                                </button>
+                                                <button
                                                     onClick={() => request.id && handleReject(request.id)}
                                                     disabled={processing === request.id}
-                                                    className="text-red-600 hover:bg-red-50 h-8"
+                                                    className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-lg transition-colors border border-transparent hover:border-red-200"
+                                                    title="ไม่อนุมัติ"
                                                 >
                                                     <X className="w-4 h-4" />
-                                                </Button>
+                                                </button>
                                             </div>
                                         ) : (
-                                            <div className="text-center text-gray-400 text-sm">-</div>
+                                            <div className="text-gray-300 text-xs text-center">-</div>
                                         )}
                                     </td>
                                 </tr>
                             ))}
                             {filteredRequests.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                                    <td colSpan={5} className="py-12 text-center text-gray-500">
                                         ไม่มีข้อมูลสลับวันหยุด
                                     </td>
                                 </tr>
