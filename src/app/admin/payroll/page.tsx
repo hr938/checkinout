@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { employeeService, attendanceService, otService, systemConfigService, type Employee, type Attendance, type OTRequest, type SystemConfig } from "@/lib/firestore";
+import { getAttendanceByDateRangeWithoutPhoto } from "@/lib/firestoreRest";
 import { Search, Calendar, DollarSign, Download, Filter } from "lucide-react";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import { th } from "date-fns/locale";
@@ -361,28 +362,47 @@ export default function PayrollPage() {
             const lateDeductionType = config?.lateDeductionType ?? "pro-rated";
             const lateDeductionRate = config?.lateDeductionRate ?? 0;
 
+            // ===== OPTIMIZATION: Fetch ALL data once instead of per-employee =====
+            // This reduces N*2 queries to just 2 queries!
+            const [allAttendance, allOT] = await Promise.all([
+                getAttendanceByDateRangeWithoutPhoto(startDate, endDate, 2000), // No photo! 2000 limit
+                otService.getByDateRange(startDate, endDate)
+            ]);
+
+            // Group attendance and OT by employee ID for fast lookup
+            const attendanceByEmployee = new Map<string, Attendance[]>();
+            (allAttendance as Attendance[]).forEach(a => {
+                const empId = a.employeeId;
+                if (!attendanceByEmployee.has(empId)) {
+                    attendanceByEmployee.set(empId, []);
+                }
+                attendanceByEmployee.get(empId)?.push(a);
+            });
+
+            const otByEmployee = new Map<string, OTRequest[]>();
+            allOT.forEach(ot => {
+                const empId = ot.employeeId;
+                if (!otByEmployee.has(empId)) {
+                    otByEmployee.set(empId, []);
+                }
+                otByEmployee.get(empId)?.push(ot);
+            });
+
+            const checkInConfig = {
+                hour: config?.checkInHour ?? 9,
+                minute: config?.checkInMinute ?? 0,
+                gracePeriod: config?.lateGracePeriod ?? 0
+            };
+
             for (const emp of targetEmployees) {
                 if (!emp.id) continue;
 
-                const checkInConfig = {
-                    hour: config?.checkInHour ?? 9,
-                    minute: config?.checkInMinute ?? 0,
-                    gracePeriod: config?.lateGracePeriod ?? 0
-                };
+                // Get employee's attendance and OT from pre-fetched data
+                const attendance = attendanceByEmployee.get(emp.id) || [];
+                const otRequests = otByEmployee.get(emp.id) || [];
 
-                // Fetch Attendance & OT
-                const [attendance, otRequests] = await Promise.all([
-                    attendanceService.getHistory(emp.id, startDate, endDate),
-                    otService.getByEmployeeId(emp.id)
-                ]);
-
-                // Filter OT by date and status
-                const approvedOT = otRequests.filter(ot =>
-                    ot.status === "อนุมัติ" &&
-                    ot.date &&
-                    ot.date >= startDate &&
-                    ot.date <= endDate
-                );
+                // Filter OT by status (date range already filtered by query)
+                const approvedOT = otRequests.filter(ot => ot.status === "อนุมัติ");
 
                 // Group Attendance by Date
                 const dailyAttendance = new Map<string, Attendance[]>();

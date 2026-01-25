@@ -290,49 +290,48 @@ export default function OTPage() {
 
     return (
         <div>
-            <PageHeader
-                title="ข้อมูลโอที"
-                subtitle={`${otRequests.length} results found`}
-                searchPlaceholder="Employee |"
-                action={
-                    <div className="flex gap-2">
-                        <Button
-                            onClick={handleAddOT}
-                            className="bg-primary-dark hover:bg-primary-dark/90 text-white rounded-xl px-6 gap-2"
-                        >
-                            <Plus className="w-4 h-4" />
-                            เพิ่มข้อมูลโอที
-                        </Button>
+            {/* Header Section */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-gray-100 shadow-sm mb-6">
+                <div>
+                    <h1 className="text-xl font-bold text-gray-900">จัดการข้อมูลโอที</h1>
+                    <p className="text-sm text-gray-500 mt-1">อนุมัติและจัดการคำขอทำงานล่วงเวลา</p>
+                </div>
+                <div>
+                    <Button
+                        onClick={handleAddOT}
+                        className="w-full sm:w-auto bg-primary-dark hover:bg-primary-dark/90 text-white rounded-lg px-4 gap-2 h-10 shadow-sm"
+                    >
+                        <Plus className="w-4 h-4" />
+                        เพิ่มคำขอ OT
+                    </Button>
+                </div>
+            </div>
 
+            {/* Stats Overview - Compact Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                {[
+                    { label: "รอพิจารณา", value: stats.pending, color: "yellow", active: statusFilter === "รออนุมัติ", onClick: () => setStatusFilter(statusFilter === "รออนุมัติ" ? "all" : "รออนุมัติ") },
+                    { label: "อนุมัติแล้ว", value: stats.approved, color: "green", active: statusFilter === "อนุมัติ", onClick: () => setStatusFilter(statusFilter === "อนุมัติ" ? "all" : "อนุมัติ") },
+                    { label: "ไม่อนุมัติ", value: stats.rejected, color: "red", active: statusFilter === "ไม่อนุมัติ", onClick: () => setStatusFilter(statusFilter === "ไม่อนุมัติ" ? "all" : "ไม่อนุมัติ") },
+                    { label: "ชม. อนุมัติรวม", value: `${stats.totalHours.toFixed(1)} h`, color: "blue", active: statusFilter === "all", onClick: () => setStatusFilter("all") },
+                ].map((stat, idx) => (
+                    <div
+                        key={idx}
+                        onClick={stat.onClick}
+                        className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-center gap-1
+                            ${stat.active
+                                ? `bg-${stat.color}-50 border-${stat.color}-200 ring-1 ring-${stat.color}-200`
+                                : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm"
+                            }`}
+                    >
+                        <span className={`text-[10px] uppercase tracking-wider font-semibold ${stat.active ? `text-${stat.color}-700` : "text-gray-500"}`}>
+                            {stat.label}
+                        </span>
+                        <span className={`text-2xl font-bold ${stat.active ? `text-${stat.color}-700` : "text-gray-900"}`}>
+                            {stat.value}
+                        </span>
                     </div>
-                }
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <StatsCard
-                    title="รอการอนุมัติ"
-                    value={stats.pending}
-                    onClick={() => setStatusFilter(statusFilter === "รออนุมัติ" ? "all" : "รออนุมัติ")}
-                    isActive={statusFilter === "รออนุมัติ"}
-                />
-                <StatsCard
-                    title="อนุมัติ"
-                    value={stats.approved}
-                    onClick={() => setStatusFilter(statusFilter === "อนุมัติ" ? "all" : "อนุมัติ")}
-                    isActive={statusFilter === "อนุมัติ"}
-                />
-                <StatsCard
-                    title="ไม่อนุมัติ"
-                    value={stats.rejected}
-                    onClick={() => setStatusFilter(statusFilter === "ไม่อนุมัติ" ? "all" : "ไม่อนุมัติ")}
-                    isActive={statusFilter === "ไม่อนุมัติ"}
-                />
-                <StatsCard
-                    title="ชั่วโมง OT ทั้งหมด"
-                    value={`${stats.totalHours.toFixed(1)} ชม.`}
-                    onClick={() => setStatusFilter("all")}
-                    isActive={statusFilter === "all"}
-                />
+                ))}
             </div>
 
             {loading ? (

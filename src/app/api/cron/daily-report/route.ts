@@ -27,7 +27,7 @@ export async function GET(request: Request) {
         const employees = await employeeService.getAll();
         const totalEmployees = employees.length;
 
-        // 3. Get Today's Attendance
+        // 3. Get Today's Attendance (Batch Fetch Optimization)
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const todayEnd = new Date();
@@ -45,42 +45,62 @@ export async function GET(request: Request) {
             day: 'numeric'
         });
 
-        // Parallel fetch for performance
-        const attendancePromises = employees.map(async (emp) => {
-            if (!emp.id) return null;
-            try {
-                const history = await attendanceService.getHistory(emp.id, todayStart, todayEnd);
-                // Find check-in record
-                const checkInRecord = history.find(h => h.status === "เข้างาน");
-                const leaveRecord = history.find(h => h.status === "ลางาน");
+        // Fetch ALL attendance for today in ONE query
+        const allAttendance = await attendanceService.getByDateRange(todayStart, todayEnd);
 
+        // Group by Employee ID
+        const attendanceMap = new Map();
+        allAttendance.forEach(att => {
+            if (att.employeeId) {
+                if (!attendanceMap.has(att.employeeId)) {
+                    attendanceMap.set(att.employeeId, []);
+                }
+                attendanceMap.get(att.employeeId).push(att);
+            }
+        });
+
+        // Calculate stats for each employee
+        employees.forEach(emp => {
+            if (!emp.id) return;
+
+            try {
+                // Get pre-fetched attendance
+                const history = attendanceMap.get(emp.id) || [];
+
+                // Find check-in record
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const checkInRecord = history.find((h: any) => h.status === "เข้างาน");
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const leaveRecord = history.find((h: any) => h.status === "ลางาน");
+
+                let status = "absent";
                 if (leaveRecord) {
-                    return "leave";
+                    status = "leave";
                 } else if (checkInRecord) {
                     if (isLate(checkInRecord.date)) {
-                        return "late";
+                        status = "late";
+                    } else {
+                        status = "present";
                     }
-                    return "present";
-                } else {
-                    return "absent";
                 }
+
+                if (status === "present") presentCount++;
+                else if (status === "late") {
+                    lateCount++;
+                    presentCount++; // Late is also present
+                }
+                else if (status === "leave") leaveCount++;
+                else if (status === "absent") absentCount++;
+
             } catch (e) {
-                console.error(`Error fetching attendance for ${emp.name}:`, e);
-                return "error";
+                console.error(`Error processing attendance for ${emp.name}:`, e);
             }
         });
 
-        const results = await Promise.all(attendancePromises);
+        // Skip Promise.all since we did sync loop
+        // const results = await Promise.all(attendancePromises);
 
-        results.forEach(status => {
-            if (status === "present") presentCount++;
-            else if (status === "late") {
-                lateCount++;
-                presentCount++; // Late is also present
-            }
-            else if (status === "leave") leaveCount++;
-            else if (status === "absent") absentCount++;
-        });
+
 
         // 4. Send Line Message
         const message = {

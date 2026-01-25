@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { attendanceService, employeeService, type Attendance, type Employee } from "@/lib/firestore";
+import { attendanceService, employeeService, swapService, type Attendance, type Employee, type SwapRequest } from "@/lib/firestore";
+import { getAttendanceByDateRangeWithoutPhoto } from "@/lib/firestoreRest";
 import { useAdmin } from "@/components/auth/AuthProvider";
 import { Users, Calendar, Clock, CheckCircle, XCircle, AlertTriangle, Download, Search } from "lucide-react";
 import { formatMinutesToHours } from "@/lib/workTime";
@@ -51,14 +52,17 @@ export default function DailySummaryPage() {
             const endDate = new Date(date);
             endDate.setHours(23, 59, 59, 999);
 
-            const [empData, attData] = await Promise.all([
+            // ===== USE REST API - NO PHOTO =====
+            const [empData, attData, swapData] = await Promise.all([
                 employeeService.getAll(),
-                attendanceService.getByDateRange(startDate, endDate),
+                getAttendanceByDateRangeWithoutPhoto(startDate, endDate, 500),
+                swapService.getAll(),
             ]);
+
 
             const activeEmployees = empData.filter(e => e.status === "ทำงาน");
             setEmployees(activeEmployees);
-            setAttendances(attData);
+            setAttendances(attData as Attendance[]);
 
             // Build summaries
             const daySummaries: DailySummary[] = activeEmployees.map(emp => {
@@ -74,7 +78,28 @@ export default function DailySummaryPage() {
                 );
 
                 const hasCheckedIn = checkInRec || lateRec;
-                const isHoliday = emp.weeklyHolidays?.includes(date.getDay()) || false;
+                // Check Swap Logic
+                // 1. Swap Work (Request to work on Holiday) -> Today is WorkDate
+                const swapWork = (swapData as SwapRequest[]).find(s =>
+                    s.employeeId === emp.id &&
+                    s.status === "อนุมัติ" &&
+                    isSameDay(new Date(s.workDate), date)
+                );
+
+                // 2. Swap Holiday (Request to take leave on Work Day) -> Today is HolidayDate
+                const swapHoliday = (swapData as SwapRequest[]).find(s =>
+                    s.employeeId === emp.id &&
+                    s.status === "อนุมัติ" &&
+                    isSameDay(new Date(s.holidayDate), date)
+                );
+
+                let isHoliday = emp.weeklyHolidays?.includes(date.getDay()) || false;
+
+                if (swapWork) {
+                    isHoliday = false; // Override to Work Day
+                } else if (swapHoliday) {
+                    isHoliday = true; // Override to Holiday
+                }
 
                 // ดึง lateMinutes จาก record (อาจอยู่ใน checkInRec หรือ lateRec)
                 const actualLateMinutes = lateRec?.lateMinutes || checkInRec?.lateMinutes || 0;

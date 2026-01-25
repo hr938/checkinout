@@ -8,6 +8,7 @@ import {
     getDocs,
     query,
     where,
+    serverTimestamp,
     orderBy,
     limit,
     startAfter,
@@ -74,7 +75,13 @@ export interface LeaveRequest {
     status: "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ";
     createdAt: Date;
     attachment?: string; // รูปภาพหลักฐาน (Base64)
+    attachments?: string[]; // รูปภาพหลักฐานหลายไฟล์ (Base64)
     rejectionReason?: string; // เหตุผลที่ไม่อนุมัติ
+    // Hourly Leave Extension
+    isHourly?: boolean;
+    hours?: number;    // จำนวนชั่วโมงที่ลา
+    hourlyStart?: string; // เช่น "10:00"
+    hourlyEnd?: string;   // เช่น "12:00"
 }
 
 // OT Request types
@@ -97,12 +104,40 @@ export interface SwapRequest {
     employeeId: string;
     employeeName: string;
     workDate: Date;      // วันหยุดปกติที่ขอมาทำงาน
-    holidayDate: Date;   // วันทำงานปกติที่ขอหยุดแทน
+    holidayDate: Date;  // วันทำงานปกติที่ขอหยุดชดเชย
     reason: string;
     status: "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ";
     createdAt: Date;
-    rejectionReason?: string; // เหตุผลที่ไม่อนุมัติ
+    rejectionReason?: string;
 }
+
+// Time Correction Request types (ขอปรับเวลา/ลงเวลาย้อนหลัง)
+export interface TimeRequest {
+    id?: string;
+    employeeId: string;
+    employeeName: string;
+    date: Date;          // วันที่เกิดเหตุ
+    type: "เข้างาน" | "ออกงาน" | "ก่อนพัก" | "หลังพัก";
+    time: Date;          // เวลาที่ถูกต้องที่ต้องการขอแก้ไข
+    reason: string;
+    attachment?: string; // หลักฐานภาพถ่าย (optional)
+    status: "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ";
+    createdAt: Date;
+    rejectionReason?: string;
+}
+
+// Admin Activity Log
+export interface AdminLog {
+    id?: string;
+    adminId: string;
+    adminName: string;
+    action: "create" | "update" | "delete" | "approve" | "reject" | "login" | "other";
+    module: "employee" | "attendance" | "leave" | "ot" | "admin" | "setting" | "payroll";
+    target?: string;
+    details: string;
+    timestamp: Date;
+}
+
 
 // Work Shift types (กะเวลาทำงาน)
 export interface Shift {
@@ -137,7 +172,8 @@ export const employeeService = {
     },
 
     async getAll() {
-        const querySnapshot = await getDocs(collection(db, "employees"));
+        // Fallback for smaller lists or dropdowns
+        const querySnapshot = await getDocs(query(collection(db, "employees"), orderBy("name")));
         return querySnapshot.docs.map(doc => {
             const data = doc.data();
             return {
@@ -147,6 +183,40 @@ export const employeeService = {
                 endDate: data.endDate?.toDate(),
             };
         }) as Employee[];
+    },
+
+    async getPaginated(limitCount: number = 20, lastDoc?: any, status?: string) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const constraints: any[] = [
+            orderBy("name"),
+            limit(limitCount)
+        ];
+
+        // Only add status filter if explicitly requested. 
+        // Note: This requires a composite index: status ASC, name ASC
+        if (status && status !== "all") {
+            constraints.unshift(where("status", "==", status));
+        }
+
+        if (lastDoc) {
+            constraints.push(startAfter(lastDoc));
+        }
+
+        const q = query(collection(db, "employees"), ...constraints);
+        const snp = await getDocs(q);
+
+        return {
+            data: snp.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    registeredDate: data.registeredDate?.toDate(),
+                    endDate: data.endDate?.toDate(),
+                };
+            }) as Employee[],
+            lastDoc: snp.docs[snp.docs.length - 1] || null
+        };
     },
 
     async getById(id: string) {
@@ -341,6 +411,45 @@ export const attendanceService = {
         })) as Attendance[];
     },
 
+    // ===== LIGHTWEIGHT VERSION FOR ANALYTICS =====
+    // ไม่รวม photo field + มี limit เพื่อ performance
+    async getByDateRangeLite(startDate: Date, endDate: Date, limitCount: number = 500) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+
+        const q = query(
+            collection(db, "attendance"),
+            where("date", ">=", Timestamp.fromDate(start)),
+            where("date", "<=", Timestamp.fromDate(end)),
+            orderBy("date", "desc"),
+            limit(limitCount)  // จำกัด records!
+        );
+
+        const querySnapshot = await getDocs(q);
+        // Map to lightweight object WITHOUT photo
+        return querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                employeeId: data.employeeId,
+                employeeName: data.employeeName,
+                date: data.date?.toDate(),
+                checkIn: data.checkIn?.toDate(),
+                checkOut: data.checkOut?.toDate(),
+                status: data.status,
+                location: data.location,
+                latitude: data.latitude,
+                longitude: data.longitude,
+                locationNote: data.locationNote,
+                distance: data.distance,
+                lateMinutes: data.lateMinutes,
+                // photo is intentionally excluded!
+            };
+        }) as Attendance[];
+    },
+
     async update(id: string, data: Partial<Attendance>) {
         const docRef = doc(db, "attendance", id);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -442,6 +551,40 @@ export const leaveService = {
         })) as LeaveRequest[];
     },
 
+    // ===== LIGHTWEIGHT VERSION FOR ANALYTICS =====
+    // ไม่รวม attachment field เพื่อลด data transfer
+    async getByDateRangeLite(startDate: Date, endDate: Date) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+
+        const q = query(
+            collection(db, "leaveRequests"),
+            where("startDate", ">=", Timestamp.fromDate(start)),
+            where("startDate", "<=", Timestamp.fromDate(end)),
+            orderBy("startDate", "desc")
+        );
+
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                employeeId: data.employeeId,
+                employeeName: data.employeeName,
+                leaveType: data.leaveType,
+                startDate: data.startDate?.toDate(),
+                endDate: data.endDate?.toDate(),
+                reason: data.reason,
+                status: data.status,
+                createdAt: data.createdAt?.toDate(),
+                rejectionReason: data.rejectionReason,
+                // attachment is intentionally excluded!
+            };
+        }) as LeaveRequest[];
+    },
+
     async updateStatus(id: string, status: LeaveRequest["status"], rejectionReason?: string) {
         const docRef = doc(db, "leaveRequests", id);
         const data: any = { status };
@@ -476,7 +619,7 @@ export const leaveService = {
         await deleteDoc(doc(db, "leaveRequests", id));
     },
 
-    async getByEmployeeId(employeeId: string, year?: number) {
+    async getByEmployeeId(employeeId: string, year?: number, limitCount?: number) {
         const constraints: QueryConstraint[] = [
             where("employeeId", "==", employeeId),
             orderBy("startDate", "desc")
@@ -489,6 +632,10 @@ export const leaveService = {
                 where("startDate", ">=", Timestamp.fromDate(startOfYear)),
                 where("startDate", "<=", Timestamp.fromDate(endOfYear))
             );
+        }
+
+        if (limitCount) {
+            constraints.push(limit(limitCount));
         }
 
         const q = query(collection(db, "leaveRequests"), ...constraints);
@@ -628,12 +775,17 @@ export const otService = {
         await deleteDoc(doc(db, "otRequests", id));
     },
 
-    async getByEmployeeId(employeeId: string) {
-        const q = query(
-            collection(db, "otRequests"),
+    async getByEmployeeId(employeeId: string, limitCount?: number) {
+        const constraints: QueryConstraint[] = [
             where("employeeId", "==", employeeId),
             orderBy("createdAt", "desc")
-        );
+        ];
+
+        if (limitCount) {
+            constraints.push(limit(limitCount));
+        }
+
+        const q = query(collection(db, "otRequests"), ...constraints);
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map(doc => ({
             id: doc.id,
@@ -670,12 +822,24 @@ export const swapService = {
         })) as SwapRequest[];
     },
 
-    async getByEmployeeId(employeeId: string) {
-        const q = query(
-            collection(db, "swapRequests"),
+    async updateStatus(id: string, status: SwapRequest["status"], rejectionReason?: string) {
+        const docRef = doc(db, "swapRequests", id);
+        const data: any = { status };
+        if (rejectionReason) data.rejectionReason = rejectionReason;
+        await updateDoc(docRef, data);
+    },
+
+    async getByEmployeeId(employeeId: string, limitCount?: number) {
+        const constraints: QueryConstraint[] = [
             where("employeeId", "==", employeeId),
             orderBy("createdAt", "desc")
-        );
+        ];
+
+        if (limitCount) {
+            constraints.push(limit(limitCount));
+        }
+
+        const q = query(collection(db, "swapRequests"), ...constraints);
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map(doc => ({
             id: doc.id,
@@ -686,18 +850,91 @@ export const swapService = {
         })) as SwapRequest[];
     },
 
-    async updateStatus(id: string, status: SwapRequest["status"], rejectionReason?: string) {
+    async update(id: string, swap: Partial<Omit<SwapRequest, "id">>) {
         const docRef = doc(db, "swapRequests", id);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data: any = { status };
-        if (rejectionReason) {
-            data.rejectionReason = rejectionReason;
+        const data: any = { ...swap };
+
+        if (swap.workDate) {
+            data.workDate = Timestamp.fromDate(swap.workDate);
         }
+        if (swap.holidayDate) {
+            data.holidayDate = Timestamp.fromDate(swap.holidayDate);
+        }
+        if (swap.createdAt) {
+            data.createdAt = Timestamp.fromDate(swap.createdAt);
+        }
+
+        // Remove undefined fields
+        Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
+
         await updateDoc(docRef, data);
     },
 
     async delete(id: string) {
         await deleteDoc(doc(db, "swapRequests", id));
+    },
+};
+
+// Time Request CRUD operations
+export const timeRequestService = {
+    async create(req: Omit<TimeRequest, "id">) {
+        const data: any = {
+            ...req,
+            date: Timestamp.fromDate(req.date),
+            time: Timestamp.fromDate(req.time),
+            createdAt: Timestamp.fromDate(req.createdAt),
+        };
+
+        // Remove undefined fields to prevent Firestore Error
+        Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
+
+        const docRef = await addDoc(collection(db, "timeRequests"), data);
+        return docRef.id;
+    },
+
+    async getByEmployeeId(employeeId: string, limitCount?: number) {
+        const constraints: QueryConstraint[] = [
+            where("employeeId", "==", employeeId),
+            orderBy("createdAt", "desc")
+        ];
+
+        if (limitCount) {
+            constraints.push(limit(limitCount));
+        }
+
+        const q = query(collection(db, "timeRequests"), ...constraints);
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            date: doc.data().date?.toDate(),
+            time: doc.data().time?.toDate(),
+            createdAt: doc.data().createdAt?.toDate(),
+        })) as TimeRequest[];
+    },
+
+    async getPending() {
+        const q = query(
+            collection(db, "timeRequests"),
+            where("status", "==", "รออนุมัติ"),
+            orderBy("createdAt", "desc")
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            date: doc.data().date?.toDate(),
+            time: doc.data().time?.toDate(),
+            createdAt: doc.data().createdAt?.toDate(),
+        })) as TimeRequest[];
+    },
+
+    async updateStatus(id: string, status: TimeRequest["status"], rejectionReason?: string) {
+        const docRef = doc(db, "timeRequests", id);
+        const data: any = { status };
+        if (rejectionReason) data.rejectionReason = rejectionReason;
+        await updateDoc(docRef, data);
     },
 };
 
@@ -899,4 +1136,87 @@ export const adminService = {
         }
         return null;
     },
+
+    async getPaginated(limitCount: number = 20, lastDoc?: any, searchQuery?: string) {
+        let constraints: any[] = [
+            orderBy("createdAt", "desc"),
+            limit(limitCount)
+        ];
+
+        // Note: Firestore search is limited. Use client-side filtering for small datasets or specialized search like Algolia for large ones.
+        // For simplicity and "formal" request, we stick to basic pagination first.
+        // If searchQuery is provided, we might need to filter client-side after fetch if dealing with small (<1000) records, 
+        // or use complex queries if indexes allow. 
+        // For now, we will rely on fetching and filtering if search is active, OR just simple pagination.
+
+        if (lastDoc) {
+            constraints.push(startAfter(lastDoc));
+        }
+
+        const q = query(collection(db, "admins"), ...constraints);
+        const snp = await getDocs(q);
+
+        return {
+            data: snp.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                createdAt: doc.data().createdAt?.toDate(),
+                lastLogin: doc.data().lastLogin?.toDate(),
+            })) as Admin[],
+            lastDoc: snp.docs[snp.docs.length - 1] || null
+        };
+    },
 };
+
+// Admin Log CRUD
+export const adminLogService = {
+    async create(log: Omit<AdminLog, "id" | "timestamp">) {
+        try {
+            await addDoc(collection(db, "admin_logs"), {
+                ...log,
+                timestamp: serverTimestamp(),
+            });
+        } catch (error) {
+            console.error("Error creating admin log:", error);
+        }
+    },
+
+    async getRecent(limitCount: number = 20) {
+        const q = query(
+            collection(db, "admin_logs"),
+            orderBy("timestamp", "desc"),
+            limit(limitCount)
+        );
+        const snp = await getDocs(q);
+        return snp.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().timestamp?.toDate(),
+        })) as AdminLog[];
+    },
+
+    async getHistoryPaginated(limitCount: number = 20, lastDoc?: any) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const constraints: any[] = [
+            orderBy("timestamp", "desc"),
+            limit(limitCount)
+        ];
+
+        if (lastDoc) {
+            constraints.push(startAfter(lastDoc));
+        }
+
+        const q = query(collection(db, "admin_logs"), ...constraints);
+        const snp = await getDocs(q);
+
+        return {
+            data: snp.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                timestamp: doc.data().timestamp?.toDate(),
+            })) as AdminLog[],
+            lastDoc: snp.docs[snp.docs.length - 1] || null
+        };
+    }
+};
+

@@ -1,5 +1,6 @@
 import { collection, getDocs, query, where, orderBy, Timestamp, deleteDoc, doc } from "firebase/firestore";
-import { db } from "./firebase";
+import { db, storage } from "./firebase";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
 // Constants for storage management
 const STORAGE_LIMIT_BYTES = 800 * 1024 * 1024; // 800MB soft limit (Firestore free tier is 1GB)
@@ -243,3 +244,82 @@ export const deleteAllPhotos = async (): Promise<{ deletedCount: number; freedBy
 // Export constants for use in other files
 export const PHOTO_STORAGE_LIMIT = STORAGE_LIMIT_BYTES;
 export const PHOTO_WARNING_THRESHOLD = WARNING_THRESHOLD;
+
+/**
+ * Convert Base64 string to Blob
+ */
+export const base64ToBlob = (base64: string, mimeType: string = 'image/jpeg'): Blob => {
+    // Remove metadata prefix (e.g., "data:image/jpeg;base64,")
+    const base64Data = base64.includes(',') ? base64.split(',')[1] : base64;
+
+    // Decode base64
+    const byteCharacters = atob(base64Data);
+    const byteArrays = [];
+
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+
+        for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+        }
+
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+    }
+
+    return new Blob(byteArrays, { type: mimeType });
+};
+
+/**
+ * Upload attendance photo to Firebase Storage
+ * Returns the download URL
+ */
+export const uploadAttendancePhoto = async (
+    employeeId: string,
+    base64Photo: string,
+    date: Date = new Date()
+): Promise<string> => {
+    try {
+        // Create filename: attendance/{employeeId}/{year}/{month}/{timestamp}.jpg
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const timestamp = date.getTime();
+        const filename = `${timestamp}.jpg`;
+        const path = `attendance/${employeeId}/${year}/${month}/${filename}`;
+
+        // Prepare file
+        // We still compress it first to save bandwidth and storage space
+        // You can adjust quality in compressBase64Image if you want better quality for Storage
+        const blob = base64ToBlob(base64Photo);
+
+        // Upload
+        const storageRef = ref(storage, path);
+        const snapshot = await uploadBytes(storageRef, blob);
+
+        // Get URL
+        const downloadURL = await getDownloadURL(snapshot.ref);
+        return downloadURL;
+    } catch (error) {
+        console.error("Error uploading photo to storage:", error);
+        throw new Error("Failed to upload photo");
+    }
+};
+
+/**
+ * Delete photo from Storage by URL (Optional helper)
+ * Useful if we want to clean up storage when deleting records
+ */
+export const deletePhotoFromStorage = async (photoUrl: string): Promise<void> => {
+    try {
+        if (!photoUrl.startsWith('http')) return; // Ignore base64
+
+        // Create a reference from the URL
+        const storageRef = ref(storage, photoUrl);
+        await deleteObject(storageRef);
+    } catch (error) {
+        console.error("Error deleting photo from storage:", error);
+        // Don't throw, just log. We don't want to break the main flow if cleanup fails.
+    }
+};
+

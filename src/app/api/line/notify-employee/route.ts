@@ -17,6 +17,7 @@ export async function POST(request: Request) {
         if (type === "leave") title = "ผลการขอลา (Leave Result)";
         else if (type === "ot") title = "ผลการขอ OT (OT Result)";
         else if (type === "swap") title = "ผลขอสลับวันหยุด (Swap Result)";
+        else if (type === "time") title = "ผลการขอปรับเวลา (Time Correction Result)";
         const color = status === "อนุมัติ" ? "#1DB446" : "#ef4444"; // Green for Approve, Red for Reject
         const statusText = status === "อนุมัติ" ? "อนุมัติแล้ว (Approved)" : "ไม่อนุมัติ (Rejected)";
 

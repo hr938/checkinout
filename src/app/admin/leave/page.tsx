@@ -7,17 +7,18 @@ import { LeaveTable } from "@/components/leave/LeaveTable";
 import { LeaveFormModal } from "@/components/leave/LeaveFormModal";
 import { Button } from "@/components/ui/button";
 import { Pencil, Plus } from "lucide-react";
-import { leaveService, type LeaveRequest, employeeService, adminService } from "@/lib/firestore";
+import { leaveService, type LeaveRequest, employeeService, adminService, adminLogService } from "@/lib/firestore";
 import { sendPushMessage } from "@/app/actions/line";
 import { auth } from "@/lib/firebase";
 import { CustomAlert } from "@/components/ui/custom-alert";
+import { useAdmin } from "@/components/auth/AuthProvider";
 
 export default function LeavePage() {
+    const { user } = useAdmin(); // Use user for logging
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
     const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [statusFilter, setStatusFilter] = useState<"all" | "รออนุมัติ" | "อนุมัติ" | "ไม่อนุมัติ">("all");
     const [alertState, setAlertState] = useState<{
         isOpen: boolean;
@@ -67,18 +68,6 @@ export default function LeavePage() {
 
     useEffect(() => {
         loadLeaves();
-
-        // Check if current user is super_admin
-        const checkAdminRole = async () => {
-            const user = auth.currentUser;
-            if (user?.email) {
-                const admin = await adminService.getByEmail(user.email);
-                if (admin?.role === "super_admin") {
-                    setIsSuperAdmin(true);
-                }
-            }
-        };
-        checkAdminRole();
     }, []);
 
     const handleAddLeave = () => {
@@ -93,7 +82,21 @@ export default function LeavePage() {
 
     const handleDeleteLeave = async (id: string) => {
         try {
+            const leaveToDelete = leaves.find(l => l.id === id);
             await leaveService.delete(id);
+
+            // Log Activity
+            if (leaveToDelete) {
+                await adminLogService.create({
+                    adminId: user?.uid || "unknown",
+                    adminName: user?.email || "Unknown",
+                    action: "delete",
+                    module: "leave",
+                    target: leaveToDelete.employeeName,
+                    details: `ลบคำขอลาของ ${leaveToDelete.employeeName} (${leaveToDelete.leaveType})`
+                });
+            }
+
             loadLeaves();
         } catch (error) {
             console.error("Error deleting leave:", error);
@@ -129,6 +132,16 @@ export default function LeavePage() {
             // Find the request and employee to send notification
             const request = leaves.find(l => l.id === id);
             if (request) {
+                // Log Activity
+                await adminLogService.create({
+                    adminId: user?.uid || "unknown",
+                    adminName: user?.email || "Unknown",
+                    action: status === "อนุมัติ" ? "approve" : "reject",
+                    module: "leave",
+                    target: request.employeeName,
+                    details: `${status}การลาของ ${request.employeeName} (${request.leaveType})` + (rejectionReason ? ` เหตุผล: ${rejectionReason}` : "")
+                });
+
                 const employee = await employeeService.getById(request.employeeId);
                 if (employee && employee.lineUserId) {
                     const isApproved = status === "อนุมัติ";
@@ -301,49 +314,48 @@ export default function LeavePage() {
 
     return (
         <div>
-            <PageHeader
-                title="ข้อมูลการลา"
-                subtitle={`${leaves.length} results found`}
-                searchPlaceholder="Employee |"
-                action={
-                    <div className="flex gap-2">
-                        <Button
-                            onClick={handleAddLeave}
-                            className="bg-primary-dark hover:bg-primary-dark/90 text-white rounded-xl px-6 gap-2"
-                        >
-                            <Plus className="w-4 h-4" />
-                            เพิ่มการลางาน
-                        </Button>
+            {/* Header Section */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-gray-100 shadow-sm mb-6">
+                <div>
+                    <h1 className="text-xl font-bold text-gray-900">จัดการข้อมูลการลา</h1>
+                    <p className="text-sm text-gray-500 mt-1">อนุมัติและจัดการคำขอลางาน</p>
+                </div>
+                <div>
+                    <Button
+                        onClick={handleAddLeave}
+                        className="w-full sm:w-auto bg-primary-dark hover:bg-primary-dark/90 text-white rounded-lg px-4 gap-2 h-10 shadow-sm"
+                    >
+                        <Plus className="w-4 h-4" />
+                        เพิ่มการลางาน
+                    </Button>
+                </div>
+            </div>
 
+            {/* Stats Overview - Compact Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                {[
+                    { label: "ทั้งหมด", value: stats.total, color: "gray", active: statusFilter === "all", onClick: () => setStatusFilter("all") },
+                    { label: "รอพิจารณา", value: stats.pending, color: "yellow", active: statusFilter === "รออนุมัติ", onClick: () => setStatusFilter(statusFilter === "รออนุมัติ" ? "all" : "รออนุมัติ") },
+                    { label: "อนุมัติแล้ว", value: stats.approved, color: "green", active: statusFilter === "อนุมัติ", onClick: () => setStatusFilter(statusFilter === "อนุมัติ" ? "all" : "อนุมัติ") },
+                    { label: "ไม่อนุมัติ", value: stats.rejected, color: "red", active: statusFilter === "ไม่อนุมัติ", onClick: () => setStatusFilter(statusFilter === "ไม่อนุมัติ" ? "all" : "ไม่อนุมัติ") },
+                ].map((stat, idx) => (
+                    <div
+                        key={idx}
+                        onClick={stat.onClick}
+                        className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-center gap-1
+                            ${stat.active
+                                ? `bg-${stat.color}-50 border-${stat.color}-200 ring-1 ring-${stat.color}-200`
+                                : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm"
+                            }`}
+                    >
+                        <span className={`text-[10px] uppercase tracking-wider font-semibold ${stat.active ? `text-${stat.color}-700` : "text-gray-500"}`}>
+                            {stat.label}
+                        </span>
+                        <span className={`text-2xl font-bold ${stat.active ? `text-${stat.color}-700` : "text-gray-900"}`}>
+                            {stat.value}
+                        </span>
                     </div>
-                }
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <StatsCard
-                    title="รอการอนุมัติ"
-                    value={stats.pending}
-                    onClick={() => setStatusFilter(statusFilter === "รออนุมัติ" ? "all" : "รออนุมัติ")}
-                    isActive={statusFilter === "รออนุมัติ"}
-                />
-                <StatsCard
-                    title="อนุมัติ"
-                    value={stats.approved}
-                    onClick={() => setStatusFilter(statusFilter === "อนุมัติ" ? "all" : "อนุมัติ")}
-                    isActive={statusFilter === "อนุมัติ"}
-                />
-                <StatsCard
-                    title="ไม่อนุมัติ"
-                    value={stats.rejected}
-                    onClick={() => setStatusFilter(statusFilter === "ไม่อนุมัติ" ? "all" : "ไม่อนุมัติ")}
-                    isActive={statusFilter === "ไม่อนุมัติ"}
-                />
-                <StatsCard
-                    title="ทั้งหมด"
-                    value={stats.total}
-                    onClick={() => setStatusFilter("all")}
-                    isActive={statusFilter === "all"}
-                />
+                ))}
             </div>
 
             {loading ? (
@@ -357,7 +369,7 @@ export default function LeavePage() {
                     onStatusUpdate={handleStatusUpdate}
                     onEdit={handleEditLeave}
                     onDelete={handleDeleteLeave}
-                    isSuperAdmin={isSuperAdmin}
+                    isSuperAdmin={true}
                 />
             )}
 

@@ -40,7 +40,7 @@ body {
 }
 
 .bg-background {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgb(255 255 255 / 18%));
+  background: #F3F4F6;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-radius: 40px;
@@ -59,7 +59,7 @@ body {
 
 
 .bg-primary {
-  background: linear-gradient(180deg, #ffffff 0%, #E0F2F1 50%, #FFFFFF 100%);
+  background: #ebebeb;
 }
 
 .bg-primary-light {
@@ -125,6 +125,7 @@ body {
 .shadow-sm {
   box-shadow: 0 1px 3px 0 rgba(249, 249, 249, 0.1), 0 1px 2px -1px rgba(255, 255, 255, 0.1);
 }
+
 /* =========================
    Minimal Scrollbar (Global)
    ========================= */
@@ -150,6 +151,7 @@ body {
 
 /* Firefox */
 * {
-  scrollbar-width: thin; /* thin | auto | none */
+  scrollbar-width: thin;
+  /* thin | auto | none */
   scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
 }

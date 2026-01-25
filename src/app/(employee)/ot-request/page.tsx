@@ -232,8 +232,8 @@ export default function OTRequestPage() {
                 </div>
             )}
 
-            <main className="px-6 -mt-6 relative z-10">
-                <div className="bg-white rounded-3xl p-6 shadow-lg border border-gray-100">
+            <main className="px-4 -mt-6 relative z-10">
+                <div className="bg-white rounded-3xl p-4 shadow-lg border border-gray-100">
                     <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                         <Clock className="w-5 h-5 text-purple-500" />
                         แบบฟอร์มขอ OT

@@ -1,12 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { attendanceService, leaveService, otService, employeeService, type Attendance, type LeaveRequest, type OTRequest, type Employee } from "@/lib/firestore";
+import { getAttendanceByDateRangeWithoutPhoto, getLeaveByDateRangeWithoutAttachment } from "@/lib/firestoreRest";
 import { useAdmin } from "@/components/auth/AuthProvider";
 import { FileText, Clock, CalendarX, AlertTriangle } from "lucide-react";
 import { format, startOfMonth, endOfMonth, differenceInMinutes, differenceInDays } from "date-fns";
 import { th } from "date-fns/locale";
+
+// Debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+    const [debouncedValue, setDebouncedValue] = useState<T>(value);
+    useEffect(() => {
+        const handler = setTimeout(() => setDebouncedValue(value), delay);
+        return () => clearTimeout(handler);
+    }, [value, delay]);
+    return debouncedValue;
+}
 
 export default function ReportsPage() {
     const { user } = useAdmin();
@@ -24,16 +35,27 @@ export default function ReportsPage() {
     const [allYearLeaves, setAllYearLeaves] = useState<LeaveRequest[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
 
+    // Debounce month selection to prevent rapid queries
+    const debouncedMonth = useDebounce(selectedMonth, 500);
+
+    // Cache for data
+    const dataCache = useRef<{
+        key: string;
+        attendance: Attendance[];
+        leaves: LeaveRequest[];
+        yearLeaves: LeaveRequest[];
+    } | null>(null);
+
     useEffect(() => {
         if (user) {
             loadData();
         }
-    }, [user, selectedMonth]);
+    }, [user, debouncedMonth]);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [year, month] = selectedMonth.split("-").map(Number);
+            const [year, month] = debouncedMonth.split("-").map(Number);
             const startDate = startOfMonth(new Date(year, month - 1));
             const endDate = endOfMonth(new Date(year, month - 1));
 
@@ -41,11 +63,15 @@ export default function ReportsPage() {
             const yearStart = new Date(year, 0, 1);
             const yearEnd = new Date(year, 11, 31);
 
+            const cacheKey = `${debouncedMonth}_${year}`;
+
+            // ===== USE REST API WITH FIELD SELECTION =====
+            // This excludes photo/attachment from network transfer!
             const [otRes, attendanceRes, leaveRes, yearLeaveRes, empRes] = await Promise.all([
                 otService.getByDateRange(startDate, endDate),
-                attendanceService.getByDateRange(startDate, endDate),
-                leaveService.getByDateRange(startDate, endDate),
-                leaveService.getByDateRange(yearStart, yearEnd),
+                getAttendanceByDateRangeWithoutPhoto(startDate, endDate, 500),  // No photo!
+                getLeaveByDateRangeWithoutAttachment(startDate, endDate, 200),  // No attachment!
+                getLeaveByDateRangeWithoutAttachment(yearStart, yearEnd, 500),  // No attachment!
                 employeeService.getAll(),
             ]);
 
@@ -53,11 +79,11 @@ export default function ReportsPage() {
             setOtData(otRes.filter(o => o.status === "อนุมัติ"));
 
             // Only late check-ins
-            setLateData(attendanceRes.filter(a => a.status === "สาย"));
+            setLateData((attendanceRes as Attendance[]).filter(a => a.status === "สาย"));
 
             // Only approved leaves
-            setLeaveData(leaveRes.filter(l => l.status === "อนุมัติ"));
-            setAllYearLeaves(yearLeaveRes.filter(l => l.status === "อนุมัติ"));
+            setLeaveData((leaveRes as LeaveRequest[]).filter(l => l.status === "อนุมัติ"));
+            setAllYearLeaves((yearLeaveRes as LeaveRequest[]).filter(l => l.status === "อนุมัติ"));
 
             setEmployees(empRes);
         } catch (error) {
@@ -100,201 +126,299 @@ export default function ReportsPage() {
         return <div className="p-8 text-center">กรุณาเข้าสู่ระบบ</div>;
     }
 
-    return (
-        <div className="flex-1 p-8">
-            <PageHeader
-                title="รายงานละเอียด"
-                subtitle="สรุป OT, การมาสาย, และการลา"
-            />
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [searchTerm, setSearchTerm] = useState("");
+    const ITEMS_PER_PAGE = 25;
 
-            {/* Month Selector */}
-            <div className="mb-6 flex items-center gap-4">
-                <label className="text-sm font-medium text-gray-700">เดือน:</label>
-                <input
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+    // Get current data based on active tab with search filter
+    const getCurrentData = () => {
+        let data: any[] = [];
+        switch (activeTab) {
+            case "ot": data = otData; break;
+            case "late": data = lateData; break;
+            case "leave": data = leaveData; break;
+        }
+
+        if (searchTerm) {
+            data = data.filter(item =>
+                item.employeeName?.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
+        return data;
+    };
+
+    const filteredData = getCurrentData();
+    const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
+    const paginatedData = filteredData.slice(
+        (currentPage - 1) * ITEMS_PER_PAGE,
+        currentPage * ITEMS_PER_PAGE
+    );
+
+    // Reset page when tab or search changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab, searchTerm]);
+
+    return (
+        <div className="flex-1 p-4 md:p-6 bg-gray-50 min-h-screen">
+            {/* Compact Header */}
+            <div className="mb-4">
+                <h1 className="text-xl font-bold text-gray-900">รายงานละเอียด</h1>
+                <p className="text-sm text-gray-500">สรุป OT, การมาสาย และการลา</p>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 mb-6">
-                <button
-                    onClick={() => setActiveTab("ot")}
-                    className={`px-4 py-2 rounded-xl font-medium transition-colors ${activeTab === "ot"
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                        }`}
-                >
-                    <Clock className="w-4 h-4 inline mr-2" />
-                    OT ({otData.length})
-                </button>
-                <button
-                    onClick={() => setActiveTab("late")}
-                    className={`px-4 py-2 rounded-xl font-medium transition-colors ${activeTab === "late"
-                        ? "bg-orange-600 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                        }`}
-                >
-                    <AlertTriangle className="w-4 h-4 inline mr-2" />
-                    มาสาย ({lateData.length})
-                </button>
-                <button
-                    onClick={() => setActiveTab("leave")}
-                    className={`px-4 py-2 rounded-xl font-medium transition-colors ${activeTab === "leave"
-                        ? "bg-purple-600 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                        }`}
-                >
-                    <CalendarX className="w-4 h-4 inline mr-2" />
-                    ลา ({leaveData.length})
-                </button>
+            {/* Toolbar - Compact */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-4">
+                <div className="flex flex-wrap items-center gap-3">
+                    {/* Month Selector */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500 uppercase">เดือน</span>
+                        <input
+                            type="month"
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div className="h-6 w-px bg-gray-200" />
+
+                    {/* Tabs - Compact Pills */}
+                    <div className="flex gap-1">
+                        <button
+                            onClick={() => setActiveTab("ot")}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${activeTab === "ot"
+                                    ? "bg-blue-600 text-white"
+                                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                }`}
+                        >
+                            <Clock className="w-3 h-3 inline mr-1" />
+                            OT ({otData.length})
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("late")}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${activeTab === "late"
+                                    ? "bg-amber-500 text-white"
+                                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                }`}
+                        >
+                            <AlertTriangle className="w-3 h-3 inline mr-1" />
+                            สาย ({lateData.length})
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("leave")}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${activeTab === "leave"
+                                    ? "bg-violet-600 text-white"
+                                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                }`}
+                        >
+                            <CalendarX className="w-3 h-3 inline mr-1" />
+                            ลา ({leaveData.length})
+                        </button>
+                    </div>
+
+                    <div className="flex-1" />
+
+                    {/* Search */}
+                    <div className="relative">
+                        <input
+                            type="text"
+                            placeholder="ค้นหาพนักงาน..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md w-40 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <svg className="w-4 h-4 absolute left-2.5 top-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                </div>
             </div>
 
             {loading ? (
-                <div className="text-center py-8">กำลังโหลด...</div>
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500">
+                    <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
+                    กำลังโหลด...
+                </div>
             ) : (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                    {/* OT Report */}
-                    {activeTab === "ot" && (
-                        <table className="w-full">
-                            <thead className="bg-blue-50">
-                                <tr>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">วันที่</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">พนักงาน</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">เวลา OT</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">จำนวนชั่วโมง</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">เหตุผล</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {otData.map((ot, idx) => {
-                                    const duration = differenceInMinutes(new Date(ot.endTime), new Date(ot.startTime));
-                                    return (
-                                        <tr key={idx} className="hover:bg-gray-50">
-                                            <td className="px-6 py-4 text-sm">
-                                                {format(new Date(ot.date), "d MMM yyyy", { locale: th })}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    {/* Table Container with Max Height */}
+                    <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
+                        {/* OT Report */}
+                        {activeTab === "ot" && (
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50 sticky top-0 z-10">
+                                    <tr className="border-b border-gray-200">
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-600 text-xs uppercase tracking-wide">วันที่</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-600 text-xs uppercase tracking-wide">พนักงาน</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-600 text-xs uppercase tracking-wide">เวลา</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-gray-600 text-xs uppercase tracking-wide">ชั่วโมง</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-600 text-xs uppercase tracking-wide">เหตุผล</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {(paginatedData as OTRequest[]).map((ot, idx) => {
+                                        const duration = differenceInMinutes(new Date(ot.endTime), new Date(ot.startTime));
+                                        const hours = (duration / 60).toFixed(1);
+                                        return (
+                                            <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-3 py-2 text-gray-600 whitespace-nowrap">
+                                                    {format(new Date(ot.date), "d MMM", { locale: th })}
+                                                </td>
+                                                <td className="px-3 py-2 font-medium text-gray-900">{ot.employeeName}</td>
+                                                <td className="px-3 py-2 text-gray-500 font-mono text-xs">
+                                                    {format(new Date(ot.startTime), "HH:mm")}-{format(new Date(ot.endTime), "HH:mm")}
+                                                </td>
+                                                <td className="px-3 py-2 text-center">
+                                                    <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-semibold">
+                                                        {hours}h
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-500 truncate max-w-[200px]" title={ot.reason}>
+                                                    {ot.reason || "-"}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {paginatedData.length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} className="px-3 py-8 text-center text-gray-400">
+                                                ไม่พบข้อมูล
                                             </td>
-                                            <td className="px-6 py-4 font-medium text-gray-800">{ot.employeeName}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-600">
-                                                {format(new Date(ot.startTime), "HH:mm")} - {format(new Date(ot.endTime), "HH:mm")}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
-                                                    {formatDuration(duration)}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-gray-600">{ot.reason || "-"}</td>
                                         </tr>
-                                    );
-                                })}
-                                {otData.length === 0 && (
-                                    <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                                            ไม่มีข้อมูล OT ในเดือนนี้
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    )}
+                                    )}
+                                </tbody>
+                            </table>
+                        )}
 
-                    {/* Late Report */}
-                    {activeTab === "late" && (
-                        <table className="w-full">
-                            <thead className="bg-orange-50">
-                                <tr>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">วันที่</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">พนักงาน</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">เวลาเข้างาน</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">สายเท่าไร</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {lateData.map((att, idx) => (
-                                    <tr key={idx} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 text-sm">
-                                            {format(new Date(att.date), "d MMM yyyy", { locale: th })}
-                                        </td>
-                                        <td className="px-6 py-4 font-medium text-gray-800">{att.employeeName}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">
-                                            {att.checkIn ? format(new Date(att.checkIn), "HH:mm:ss") : "-"}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-lg text-sm font-medium">
-                                                {att.lateMinutes !== undefined ? formatDuration(att.lateMinutes) : "-"}
-                                            </span>
-                                        </td>
+                        {/* Late Report */}
+                        {activeTab === "late" && (
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50 sticky top-0 z-10">
+                                    <tr className="border-b border-gray-200">
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-600 text-xs uppercase tracking-wide">วันที่</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-600 text-xs uppercase tracking-wide">พนักงาน</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-gray-600 text-xs uppercase tracking-wide">เข้างาน</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-gray-600 text-xs uppercase tracking-wide">สาย</th>
                                     </tr>
-                                ))}
-                                {lateData.length === 0 && (
-                                    <tr>
-                                        <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
-                                            ไม่มีข้อมูลการมาสายในเดือนนี้
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    )}
-
-                    {/* Leave Report */}
-                    {activeTab === "leave" && (
-                        <table className="w-full">
-                            <thead className="bg-purple-50">
-                                <tr>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">พนักงาน</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">ประเภท</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">วันที่</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">จำนวนวัน</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">ครั้งที่ของปีนี้</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">เหตุผล</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {leaveData.map((leave, idx) => {
-                                    const days = differenceInDays(new Date(leave.endDate), new Date(leave.startDate)) + 1;
-                                    const count = getLeaveCountOfYear(leave.employeeId, leave.leaveType, new Date(leave.startDate));
-                                    const total = getTotalLeaveCountOfYear(leave.employeeId, leave.leaveType);
-                                    return (
-                                        <tr key={idx} className="hover:bg-gray-50">
-                                            <td className="px-6 py-4 font-medium text-gray-800">{leave.employeeName}</td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-2 py-1 rounded-lg text-sm font-medium ${leave.leaveType === "ลาป่วย"
-                                                    ? "bg-red-100 text-red-700"
-                                                    : leave.leaveType === "ลากิจ"
-                                                        ? "bg-blue-100 text-blue-700"
-                                                        : "bg-green-100 text-green-700"
-                                                    }`}>
-                                                    {leave.leaveType}
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {(paginatedData as Attendance[]).map((att, idx) => (
+                                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-3 py-2 text-gray-600 whitespace-nowrap">
+                                                {format(new Date(att.date), "d MMM", { locale: th })}
+                                            </td>
+                                            <td className="px-3 py-2 font-medium text-gray-900">{att.employeeName}</td>
+                                            <td className="px-3 py-2 text-center font-mono text-xs text-gray-500">
+                                                {att.checkIn ? format(new Date(att.checkIn), "HH:mm") : "-"}
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                <span className="inline-block px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-xs font-semibold">
+                                                    {att.lateMinutes !== undefined ? `${att.lateMinutes}m` : "-"}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-sm text-gray-600">
-                                                {format(new Date(leave.startDate), "d MMM", { locale: th })} - {format(new Date(leave.endDate), "d MMM yyyy", { locale: th })}
-                                            </td>
-                                            <td className="px-6 py-4 text-center">{days} วัน</td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
-                                                    {count}/{total}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-gray-600">{leave.reason || "-"}</td>
                                         </tr>
-                                    );
-                                })}
-                                {leaveData.length === 0 && (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                                            ไม่มีข้อมูลการลาในเดือนนี้
-                                        </td>
+                                    ))}
+                                    {paginatedData.length === 0 && (
+                                        <tr>
+                                            <td colSpan={4} className="px-3 py-8 text-center text-gray-400">
+                                                ไม่พบข้อมูล
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        )}
+
+                        {/* Leave Report */}
+                        {activeTab === "leave" && (
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50 sticky top-0 z-10">
+                                    <tr className="border-b border-gray-200">
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-600 text-xs uppercase tracking-wide">พนักงาน</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-gray-600 text-xs uppercase tracking-wide">ประเภท</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-600 text-xs uppercase tracking-wide">ช่วงวันที่</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-gray-600 text-xs uppercase tracking-wide">วัน</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-gray-600 text-xs uppercase tracking-wide">ครั้งที่</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-600 text-xs uppercase tracking-wide">เหตุผล</th>
                                     </tr>
-                                )}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {(paginatedData as LeaveRequest[]).map((leave, idx) => {
+                                        const days = differenceInDays(new Date(leave.endDate), new Date(leave.startDate)) + 1;
+                                        const count = getLeaveCountOfYear(leave.employeeId, leave.leaveType, new Date(leave.startDate));
+                                        const total = getTotalLeaveCountOfYear(leave.employeeId, leave.leaveType);
+                                        const typeColor = leave.leaveType === "ลาป่วย"
+                                            ? "bg-red-50 text-red-700"
+                                            : leave.leaveType === "ลากิจ"
+                                                ? "bg-blue-50 text-blue-700"
+                                                : "bg-emerald-50 text-emerald-700";
+                                        return (
+                                            <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-3 py-2 font-medium text-gray-900">{leave.employeeName}</td>
+                                                <td className="px-3 py-2 text-center">
+                                                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${typeColor}`}>
+                                                        {leave.leaveType.replace("ลา", "")}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">
+                                                    {format(new Date(leave.startDate), "d MMM", { locale: th })} - {format(new Date(leave.endDate), "d MMM", { locale: th })}
+                                                </td>
+                                                <td className="px-3 py-2 text-center text-gray-600 font-medium">{days}</td>
+                                                <td className="px-3 py-2 text-center">
+                                                    <span className="inline-block px-1.5 py-0.5 bg-violet-50 text-violet-700 rounded text-xs font-medium">
+                                                        {count}/{total}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-500 truncate max-w-[150px]" title={leave.reason}>
+                                                    {leave.reason || "-"}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {paginatedData.length === 0 && (
+                                        <tr>
+                                            <td colSpan={6} className="px-3 py-8 text-center text-gray-400">
+                                                ไม่พบข้อมูล
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+
+                    {/* Pagination Footer */}
+                    {totalPages > 1 && (
+                        <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs">
+                            <span className="text-gray-500">
+                                แสดง {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filteredData.length)} จาก {filteredData.length} รายการ
+                            </span>
+                            <div className="flex gap-1">
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                    className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    ก่อนหน้า
+                                </button>
+                                <span className="px-3 py-1 bg-white border border-gray-300 rounded font-medium">
+                                    {currentPage} / {totalPages}
+                                </span>
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage === totalPages}
+                                    className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    ถัดไป
+                                </button>
+                            </div>
+                        </div>
                     )}
                 </div>
             )}
         </div>
     );
 }
+

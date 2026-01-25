@@ -8,7 +8,7 @@ import { attendanceService, systemConfigService, shiftService, type Shift } from
 import { isLate, getLateMinutes, isEligibleForOT, getOTMinutes, formatMinutesToHours } from "@/lib/workTime";
 import { useEmployee } from "@/contexts/EmployeeContext";
 import { EmployeeHeader } from "@/components/mobile/EmployeeHeader";
-import { compressBase64Image, canUploadPhoto } from "@/lib/storage";
+import { compressBase64Image, canUploadPhoto, uploadAttendancePhoto } from "@/lib/storage";
 import { calculateDistance } from "@/lib/location";
 
 import { CustomAlert } from "@/components/ui/custom-alert";
@@ -619,8 +619,8 @@ export default function CheckInPage() {
                 }
             }
 
-            // Process photo as Base64 (stored directly in Firestore)
-            let photoBase64: string | null = null;
+            // Process photo: Upload to Storage (NEW) or Base64 (Legacy Fallback)
+            let photoUrl: string | null = null;
 
             // บังคับรูปสำหรับออกนอกพื้นที่ หรือตาม requirePhoto setting
             const isOffsiteType = checkInType === "ออกนอกพื้นที่ขาไป" || checkInType === "ออกนอกพื้นที่ขากลับ";
@@ -629,7 +629,7 @@ export default function CheckInPage() {
             if (needsPhoto) {
                 if (photo && employee?.id) {
                     try {
-                        // Check storage limit before saving
+                        // Check storage limit (Updated: checking if upload is allowed)
                         const uploadCheck = await canUploadPhoto(photo);
                         if (!uploadCheck.canUpload) {
                             showAlert("พื้นที่เก็บข้อมูลเต็ม", uploadCheck.message, "error");
@@ -637,17 +637,17 @@ export default function CheckInPage() {
                             return;
                         }
 
-                        // Show warning if near limit
-                        if (uploadCheck.message) {
-                            console.warn(uploadCheck.message);
-                        }
+                        // Compress the photo before uploading
+                        const compressedBase64 = await compressBase64Image(photo, 640, 480, 0.6);
 
-                        // Compress the photo before saving
-                        photoBase64 = await compressBase64Image(photo, 640, 480, 0.6);
-                    } catch (compressError) {
-                        console.error("Error compressing photo:", compressError);
-                        // Use original photo if compression fails
-                        photoBase64 = photo;
+                        // Upload to Cloud Storage
+                        photoUrl = await uploadAttendancePhoto(employee.id, compressedBase64);
+
+                    } catch (uploadError) {
+                        console.error("Error uploading photo:", uploadError);
+                        showAlert("อัปโหลดรูปไม่สำเร็จ", "กรุณาลองใหม่อีกครั้ง", "error");
+                        setLoading(false);
+                        return;
                     }
                 } else {
                     // needsPhoto is true but no photo data
@@ -659,9 +659,7 @@ export default function CheckInPage() {
                     return;
                 }
             } else {
-                // requirePhoto is false and not offsite type
                 console.log("Photo saving skipped (requirePhoto is false)");
-                // photoBase64 remains null
             }
 
             try {
@@ -741,8 +739,8 @@ export default function CheckInPage() {
                     }
                 }
 
-                if (photoBase64) {
-                    attendanceData.photo = photoBase64;
+                if (photoUrl) {
+                    attendanceData.photo = photoUrl;
                 }
 
                 if (locationNote.trim()) {

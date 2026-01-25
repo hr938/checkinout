@@ -3,10 +3,11 @@
 import { useState, useEffect } from "react";
 import { X, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { adminService, type Admin } from "@/lib/firestore";
+import { adminService, type Admin, adminLogService } from "@/lib/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { firebaseConfig } from "@/lib/firebase";
+import { useAdmin } from "@/components/auth/AuthProvider";
 
 interface AdminFormModalProps {
     isOpen: boolean;
@@ -16,6 +17,7 @@ interface AdminFormModalProps {
 }
 
 export function AdminFormModal({ isOpen, onClose, admin, onSuccess }: AdminFormModalProps) {
+    const { user } = useAdmin();
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [formData, setFormData] = useState({
@@ -56,6 +58,17 @@ export function AdminFormModal({ isOpen, onClose, admin, onSuccess }: AdminFormM
                     email: formData.email,
                     role: formData.role
                 });
+
+                // Log Activity
+                await adminLogService.create({
+                    adminId: user?.uid || "unknown",
+                    adminName: user?.email || "Unknown",
+                    action: "update",
+                    module: "admin",
+                    target: formData.email,
+                    details: `แก้ไขข้อมูลผู้ดูแล: ${formData.email} (${formData.role})`
+                });
+
             } else {
                 // Create new admin
                 // 1. Create in Firebase Auth using secondary app to avoid logging out current user
@@ -72,6 +85,17 @@ export function AdminFormModal({ isOpen, onClose, admin, onSuccess }: AdminFormM
                         role: formData.role,
                         createdAt: new Date(),
                     });
+
+                    // Log Activity
+                    await adminLogService.create({
+                        adminId: user?.uid || "unknown",
+                        adminName: user?.email || "Unknown",
+                        action: "create",
+                        module: "admin",
+                        target: formData.email,
+                        details: `เพิ่มผู้ดูแลระบบใหม่: ${formData.email} (${formData.role})`
+                    });
+
                 } catch (authError: any) {
                     if (authError.code === 'auth/email-already-in-use') {
                         alert("อีเมลนี้มีผู้ใช้งานแล้วในระบบ");

@@ -1,28 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { attendanceService, leaveService, otService, swapService } from "@/lib/firestore";
-import { Attendance, LeaveRequest, OTRequest, SwapRequest } from "@/lib/firestore";
+import { attendanceService, leaveService, otService, swapService, timeRequestService } from "@/lib/firestore";
+import { getAttendanceByEmployeeIdWithoutPhoto } from "@/lib/firestoreRest";
+import { Attendance, LeaveRequest, OTRequest, SwapRequest, TimeRequest } from "@/lib/firestore";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { EmployeeHeader } from "@/components/mobile/EmployeeHeader";
 import { useEmployee } from "@/contexts/EmployeeContext";
-import { Calendar, Clock, MapPin, FileText, Clock as ClockIcon, UserX } from "lucide-react";
+import { Calendar, Clock, MapPin, FileText, UserX, Filter, CheckCircle, XCircle, AlertCircle, ArrowLeftRight, History } from "lucide-react";
+
+// Unified Type
+type HistoryItem = {
+    id: string;
+    type: "attendance" | "leave" | "ot" | "swap" | "time_correction";
+    date: Date;
+    title: string;
+    subtitle?: string;
+    status?: string; // "เข้างาน" | "ออกงาน" | "อนุมัติ" ...
+    details?: string;
+    sortTime: number; // timestamp for sorting
+    originalData: any;
+};
 
 export default function HistoryPage() {
     const { employee, loading: employeeLoading } = useEmployee();
-    const [activeTab, setActiveTab] = useState<"attendance" | "leave" | "ot" | "swap">("attendance");
-
-    const [attendance, setAttendance] = useState<Attendance[]>([]);
-    const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
-    const [ots, setOts] = useState<OTRequest[]>([]);
-    const [swaps, setSwaps] = useState<SwapRequest[]>([]);
-
-    const [hasMore, setHasMore] = useState(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [lastDoc, setLastDoc] = useState<any>(null);
-    const [loadingMore, setLoadingMore] = useState(false);
-
+    const [filter, setFilter] = useState<"all" | "work" | "request">("all");
+    const [items, setItems] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -30,22 +34,105 @@ export default function HistoryPage() {
             if (!employee?.id) return;
             setLoading(true);
             try {
-                // Fetch first page of attendance (limit 20)
-                const attendanceResult = await attendanceService.getHistoryPaginated(employee.id, 20);
-
-                const [leaveData, otData, swapData] = await Promise.all([
-                    leaveService.getByEmployeeId(employee.id),
-                    otService.getByEmployeeId(employee.id),
-                    swapService.getByEmployeeId(employee.id)
+                // Fetch Data concurrently
+                // Fetch Data concurrently
+                // Attendance: Fetch last 100 records
+                // Requests: Fetch last 60 records each to prevent performance issues
+                const LIMIT_REQ = 60;
+                const [atts, leaves, ots, swaps, times] = await Promise.all([
+                    getAttendanceByEmployeeIdWithoutPhoto(employee.id, 100),
+                    leaveService.getByEmployeeId(employee.id, undefined, LIMIT_REQ),
+                    otService.getByEmployeeId(employee.id, LIMIT_REQ),
+                    swapService.getByEmployeeId(employee.id, LIMIT_REQ),
+                    timeRequestService.getByEmployeeId(employee.id, LIMIT_REQ)
                 ]);
 
-                setAttendance(attendanceResult.data);
-                setLastDoc(attendanceResult.lastDoc);
-                setHasMore(!!attendanceResult.lastDoc);
+                const historyItems: HistoryItem[] = [];
 
-                setLeaves(leaveData);
-                setOts(otData);
-                setSwaps(swapData);
+                // 1. Process Attendance
+                (atts as Attendance[]).forEach(a => {
+                    historyItems.push({
+                        id: a.id || Math.random().toString(),
+                        type: "attendance",
+                        date: a.date instanceof Date ? a.date : (a.date as any).toDate(),
+                        title: a.status, // "เข้างาน" / "ออกงาน"
+                        subtitle: format(a.date instanceof Date ? a.date : (a.date as any).toDate(), "HH:mm น."),
+                        status: a.status, // Used for color logic
+                        details: a.location,
+                        sortTime: (a.date instanceof Date ? a.date : (a.date as any).toDate()).getTime(),
+                        originalData: a
+                    });
+                });
+
+                // 2. Process Leave
+                leaves.forEach(l => {
+                    const d = l.createdAt instanceof Date ? l.createdAt : (l.createdAt as any).toDate();
+                    historyItems.push({
+                        id: l.id || Math.random().toString(),
+                        type: "leave",
+                        date: d,
+                        title: `ลา: ${l.leaveType}`,
+                        subtitle: `${format(l.startDate instanceof Date ? l.startDate : (l.startDate as any).toDate(), "d MMM", { locale: th })} - ${format(l.endDate instanceof Date ? l.endDate : (l.endDate as any).toDate(), "d MMM", { locale: th })}`,
+                        status: l.status,
+                        details: l.reason,
+                        sortTime: d.getTime(),
+                        originalData: l
+                    });
+                });
+
+                // 3. Process OT
+                ots.forEach(o => {
+                    const d = o.createdAt instanceof Date ? o.createdAt : (o.createdAt as any).toDate();
+                    historyItems.push({
+                        id: o.id || Math.random().toString(),
+                        type: "ot",
+                        date: d,
+                        title: "ขอ OT",
+                        subtitle: `${format(o.startTime instanceof Date ? o.startTime : (o.startTime as any).toDate(), "HH:mm")} - ${format(o.endTime instanceof Date ? o.endTime : (o.endTime as any).toDate(), "HH:mm")}`,
+                        status: o.status,
+                        details: o.reason,
+                        sortTime: d.getTime(),
+                        originalData: o
+                    });
+                });
+
+                // 4. Process Swap
+                swaps.forEach(s => {
+                    const d = s.createdAt instanceof Date ? s.createdAt : (s.createdAt as any).toDate();
+                    historyItems.push({
+                        id: s.id || Math.random().toString(),
+                        type: "swap",
+                        date: d,
+                        title: "ขอสลับวัน",
+                        subtitle: `หยุด: ${format(s.holidayDate instanceof Date ? s.holidayDate : (s.holidayDate as any).toDate(), "d MMM", { locale: th })}`,
+                        status: s.status,
+                        details: s.reason,
+                        sortTime: d.getTime(),
+                        originalData: s
+                    });
+                });
+
+                // 5. Process Time Correction
+                times.forEach(t => {
+                    const d = t.createdAt instanceof Date ? t.createdAt : (t.createdAt as any).toDate();
+                    historyItems.push({
+                        id: t.id || Math.random().toString(),
+                        type: "time_correction",
+                        date: d,
+                        title: `แก้เวลา: ${t.type}`,
+                        subtitle: `${format(t.date instanceof Date ? t.date : (t.date as any).toDate(), "d MMM", { locale: th })} เวลา ${format(t.time instanceof Date ? t.time : (t.time as any).toDate(), "HH:mm")}`,
+                        status: t.status,
+                        details: t.reason,
+                        sortTime: d.getTime(),
+                        originalData: t
+                    });
+                });
+
+                // Sort descending
+                historyItems.sort((a, b) => b.sortTime - a.sortTime);
+
+                setItems(historyItems);
+
             } catch (error) {
                 console.error("Error fetching history:", error);
             } finally {
@@ -53,342 +140,159 @@ export default function HistoryPage() {
             }
         };
 
-        if (employee) {
-            fetchData();
-        } else if (!employeeLoading) {
-            // If employee loading is done but no employee found, stop loading
-            setLoading(false);
-        }
+        if (employee) fetchData();
+        else if (!employeeLoading) setLoading(false);
     }, [employee, employeeLoading]);
 
-    const handleLoadMore = async () => {
-        if (!employee?.id || !lastDoc || loadingMore) return;
+    // Filtering
+    const filteredItems = items.filter(item => {
+        if (filter === "all") return true;
+        if (filter === "work") return item.type === "attendance";
+        if (filter === "request") return item.type !== "attendance";
+        return true;
+    });
 
-        setLoadingMore(true);
-        try {
-            const result = await attendanceService.getHistoryPaginated(employee.id, 20, lastDoc);
+    // Grouping by Date
+    const groupedItems: { [key: string]: HistoryItem[] } = {};
+    filteredItems.forEach(item => {
+        const dateKey = format(item.date, "d MMMM yyyy", { locale: th });
+        if (!groupedItems[dateKey]) groupedItems[dateKey] = [];
+        groupedItems[dateKey].push(item);
+    });
 
-            setAttendance(prev => [...prev, ...result.data]);
-            setLastDoc(result.lastDoc);
-            setHasMore(!!result.lastDoc);
-        } catch (error) {
-            console.error("Error loading more history:", error);
-        } finally {
-            setLoadingMore(false);
+    const getIcon = (item: HistoryItem) => {
+        switch (item.type) {
+            case "attendance": return <Clock className="w-5 h-5 text-green-600" />;
+            case "leave": return <FileText className="w-5 h-5 text-blue-600" />;
+            case "ot": return <Clock className="w-5 h-5 text-purple-600" />;
+            case "swap": return <ArrowLeftRight className="w-5 h-5 text-teal-600" />;
+            case "time_correction": return <History className="w-5 h-5 text-orange-600" />;
         }
     };
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case "อนุมัติ": return "bg-green-100 text-green-700";
-            case "ไม่อนุมัติ": return "bg-red-100 text-red-700";
-            case "รออนุมัติ": return "bg-yellow-100 text-yellow-700";
-            default: return "bg-gray-100 text-gray-700";
+    const getStatusBadge = (status?: string) => {
+        if (!status) return null;
+        if (["เข้างาน", "ออกงาน"].includes(status)) {
+            return (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${status === 'เข้างาน' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                    {status}
+                </span>
+            );
         }
-    };
 
-    const getStatusBorder = (status: string) => {
-        switch (status) {
-            case "อนุมัติ": return "bg-green-500";
-            case "ไม่อนุมัติ": return "bg-red-500";
-            case "รออนุมัติ": return "bg-yellow-500";
-            default: return "bg-gray-500";
-        }
+        let colorClass = "bg-gray-100 text-gray-600";
+        let icon = null;
+
+        if (status === "อนุมัติ") { colorClass = "bg-green-50 text-green-600"; icon = <CheckCircle className="w-3 h-3" />; }
+        else if (status === "ไม่อนุมัติ") { colorClass = "bg-red-50 text-red-600"; icon = <XCircle className="w-3 h-3" />; }
+        else if (status === "รออนุมัติ") { colorClass = "bg-yellow-50 text-yellow-600"; icon = <Clock className="w-3 h-3" />; }
+
+        return (
+            <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${colorClass}`}>
+                {icon} {status}
+            </span>
+        );
     };
 
     if (!employee && !employeeLoading) {
         return (
-            <div className="min-h-screen bg-gray-50 pb-10">
+            <div className="min-h-screen bg-gray-50 pb-20">
                 <EmployeeHeader />
-                <main className="px-6 -mt-6 relative z-10">
-                    <div className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100 text-center">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <UserX className="w-8 h-8 text-gray-400" />
-                        </div>
-                        <h2 className="text-lg font-bold text-gray-800 mb-2">ไม่พบข้อมูลพนักงาน</h2>
-                        <p className="text-gray-500 text-sm mb-6">
-                            คุณยังไม่ได้ลงทะเบียนในระบบ
-                            <br />
-                            กรุณาติดต่อผู้ดูแลระบบเพื่อลงทะเบียนใช้งาน
-                        </p>
-                    </div>
-                </main>
+                <div className="p-8 text-center text-gray-500">ไม่พบข้อมูลพนักงาน</div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 pb-10">
+        <div className="min-h-screen bg-gray-50 pb-20">
             <EmployeeHeader />
 
-            <main className="px-6 -mt-6 relative z-10 space-y-6">
-
-                {/* Tabs */}
-                <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-gray-100 flex">
+            <div className="px-4 -mt-6 relative z-10">
+                {/* Filter Chips */}
+                <div className="bg-white/90 backdrop-blur-md p-1.5 rounded-xl border border-gray-200 shadow-sm flex gap-2 overflow-x-auto no-scrollbar mb-4">
                     <button
-                        onClick={() => setActiveTab("attendance")}
-                        className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === "attendance"
-                            ? "bg-primary-dark text-white shadow-md"
-                            : "text-gray-500 hover:bg-gray-50"
-                            }`}
+                        onClick={() => setFilter("all")}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${filter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                     >
-                        ลงเวลา
+                        ทั้งหมด
                     </button>
                     <button
-                        onClick={() => setActiveTab("leave")}
-                        className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === "leave"
-                            ? "bg-primary-dark text-white shadow-md"
-                            : "text-gray-500 hover:bg-gray-50"
-                            }`}
+                        onClick={() => setFilter("work")}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1 ${filter === 'work' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}
                     >
-                        การลา
+                        <Clock className="w-3 h-3" />
+                        เข้า/ออกงาน
                     </button>
                     <button
-                        onClick={() => setActiveTab("ot")}
-                        className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === "ot"
-                            ? "bg-primary-dark text-white shadow-md"
-                            : "text-gray-500 hover:bg-gray-50"
-                            }`}
+                        onClick={() => setFilter("request")}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1 ${filter === 'request' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
                     >
-                        โอที
-                    </button>
-                    <button
-                        onClick={() => setActiveTab("swap")}
-                        className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === "swap"
-                            ? "bg-primary-dark text-white shadow-md"
-                            : "text-gray-500 hover:bg-gray-50"
-                            }`}
-                    >
-                        สลับวัน
+                        <FileText className="w-3 h-3" />
+                        คำร้อง
                     </button>
                 </div>
+            </div>
 
-                <div className="bg-white rounded-3xl p-6 shadow-lg border border-gray-100 min-h-[300px]">
-                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        {activeTab === "attendance" && <Calendar className="w-5 h-5 text-orange-500" />}
-                        {activeTab === "leave" && <FileText className="w-5 h-5 text-blue-500" />}
-                        {activeTab === "ot" && <ClockIcon className="w-5 h-5 text-purple-500" />}
-                        {activeTab === "swap" && <ClockIcon className="w-5 h-5 text-teal-500" />}
+            <main className="px-4 pb-8 space-y-6">
+                {loading ? (
+                    <div className="text-center py-10">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                        <p className="text-xs text-gray-500 mt-2">กำลังโหลดประวัติ...</p>
+                    </div>
+                ) : filteredItems.length === 0 ? (
+                    <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+                        <History className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-400 text-sm">ไม่พบประวัติการทำรายการ</p>
+                    </div>
+                ) : (
+                    Object.entries(groupedItems).map(([date, groupItems]) => (
+                        <div key={date} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <h3 className="text-xs font-bold text-gray-500 mb-2 ml-2">{date}</h3>
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50 overflow-hidden">
+                                {groupItems.map((item) => (
+                                    <div key={item.id} className="p-3.5 flex items-start gap-4 hover:bg-gray-50 transition-colors">
+                                        {/* Time Column */}
+                                        <div className="flex flex-col items-center min-w-[50px] pt-1">
+                                            <span className="text-sm font-bold text-gray-900">
+                                                {format(item.date, "HH:mm")}
+                                            </span>
+                                            {/* Vertical Line Connector (Visual only) */}
+                                            {/* <div className="h-full w-px bg-gray-100 mt-1"></div> */}
+                                        </div>
 
-                        {activeTab === "attendance" && "ประวัติการลงเวลา"}
-                        {activeTab === "leave" && "ประวัติการลา"}
-                        {activeTab === "ot" && "ประวัติการขอโอที"}
-                        {activeTab === "swap" && "ประวัติการสลับวันหยุด"}
-                    </h2>
+                                        {/* Icon */}
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-gray-50 ${item.type === 'attendance' ? 'bg-green-50' :
+                                            item.type === 'leave' ? 'bg-blue-50' :
+                                                item.type === 'ot' ? 'bg-purple-50' :
+                                                    item.type === 'time_correction' ? 'bg-orange-50' : 'bg-gray-50'
+                                            }`}>
+                                            {getIcon(item)}
+                                        </div>
 
-                    {loading ? (
-                        <div className="text-center py-12 text-gray-400 flex flex-col items-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-                            กำลังโหลดข้อมูล...
+                                        {/* Content */}
+                                        <div className="flex-1 min-w-0 pt-0.5">
+                                            <div className="flex justify-between items-start">
+                                                <h4 className="font-bold text-gray-800 text-sm">{item.title}</h4>
+                                                {getStatusBadge(item.status)}
+                                            </div>
+
+                                            {item.subtitle && (
+                                                <p className="text-xs text-gray-500 mt-0.5 font-medium">{item.subtitle}</p>
+                                            )}
+
+                                            {item.details && (
+                                                <p className="text-[11px] text-gray-400 mt-1 line-clamp-1 bg-gray-50 inline-block px-1.5 py-0.5 rounded">
+                                                    {item.details}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {/* Attendance List */}
-                            {activeTab === "attendance" && (
-                                attendance.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                                        ไม่พบประวัติการลงเวลา
-                                    </div>
-                                ) : (
-                                    attendance.map((record) => (
-                                        <div
-                                            key={record.id}
-                                            className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden"
-                                        >
-                                            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${record.status === 'เข้างาน' ? 'bg-green-500' :
-                                                record.status === 'ออกงาน' ? 'bg-red-500' : 'bg-orange-500'
-                                                }`} />
-
-                                            <div className="flex justify-between items-start mb-2 pl-2">
-                                                <div>
-                                                    <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold mb-1 ${record.status === 'เข้างาน' ? 'bg-green-100 text-green-700' :
-                                                        record.status === 'ออกงาน' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
-                                                        }`}>
-                                                        {record.status}
-                                                    </span>
-                                                    <div className="text-sm font-medium text-gray-900">
-                                                        {format(record.date, "d MMMM yyyy", { locale: th })}
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-lg font-bold text-gray-800 flex items-center justify-end gap-1">
-                                                        <Clock className="w-4 h-4 text-gray-400" />
-                                                        {format(record.date, "HH:mm")}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {record.location && (
-                                                <div className="flex items-start gap-1.5 text-xs text-gray-500 pl-2 mt-2 pt-2 border-t border-gray-50">
-                                                    <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                                                    <span className="line-clamp-1">{record.location}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))
-                                )
-                            )}
-
-
-                            {/* Load More Button for Attendance */}
-                            {activeTab === "attendance" && hasMore && attendance.length > 0 && (
-                                <button
-                                    onClick={handleLoadMore}
-                                    disabled={loadingMore}
-                                    className="w-full py-3 mt-4 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 transition-all disabled:opacity-50"
-                                >
-                                    {loadingMore ? (
-                                        <span className="flex items-center justify-center gap-2">
-                                            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                                            กำลังโหลด...
-                                        </span>
-                                    ) : (
-                                        "ทราบบันทึกเพิ่มเติม"
-                                    )}
-                                </button>
-                            )}
-
-                            {/* Leave List */}
-                            {activeTab === "leave" && (
-                                leaves.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                                        ไม่พบประวัติการลา
-                                    </div>
-                                ) : (
-                                    leaves.map((leave) => (
-                                        <div
-                                            key={leave.id}
-                                            className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden"
-                                        >
-                                            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${getStatusBorder(leave.status)}`} />
-
-                                            <div className="flex justify-between items-start mb-2 pl-2">
-                                                <div>
-                                                    <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold mb-1 ${getStatusColor(leave.status)}`}>
-                                                        {leave.status}
-                                                    </span>
-                                                    <div className="text-sm font-bold text-gray-900">
-                                                        {leave.leaveType}
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-xs text-gray-500 mb-1">วันที่ลา</div>
-                                                    <div className="text-sm font-medium text-gray-800">
-                                                        {format(leave.startDate, "d MMM", { locale: th })} - {format(leave.endDate, "d MMM", { locale: th })}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {leave.reason && (
-                                                <div className="text-xs text-gray-500 pl-2 mt-2 pt-2 border-t border-gray-50">
-                                                    เหตุผล: {leave.reason}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))
-                                )
-                            )}
-
-                            {/* OT List */}
-                            {activeTab === "ot" && (
-                                ots.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                                        ไม่พบประวัติการขอโอที
-                                    </div>
-                                ) : (
-                                    ots.map((ot) => (
-                                        <div
-                                            key={ot.id}
-                                            className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden"
-                                        >
-                                            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${getStatusBorder(ot.status)}`} />
-
-                                            <div className="flex justify-between items-start mb-2 pl-2">
-                                                <div>
-                                                    <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold mb-1 ${getStatusColor(ot.status)}`}>
-                                                        {ot.status}
-                                                    </span>
-                                                    <div className="text-sm font-bold text-gray-900">
-                                                        {format(ot.date, "d MMMM yyyy", { locale: th })}
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-xs text-gray-500 mb-1">เวลา</div>
-                                                    <div className="text-sm font-medium text-gray-800">
-                                                        {format(ot.startTime, "HH:mm")} - {format(ot.endTime, "HH:mm")}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {ot.reason && (
-                                                <div className="text-xs text-gray-500 pl-2 mt-2 pt-2 border-t border-gray-50">
-                                                    เหตุผล: {ot.reason}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))
-                                )
-                            )}
-
-                            {/* Swap List */}
-                            {activeTab === "swap" && (
-                                swaps.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                                        ไม่พบประวัติการสลับวันหยุด
-                                    </div>
-                                ) : (
-                                    swaps.map((swap) => (
-                                        <div
-                                            key={swap.id}
-                                            className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden"
-                                        >
-                                            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${getStatusBorder(swap.status)}`} />
-
-                                            <div className="flex justify-between items-start mb-2 pl-2">
-                                                <div>
-                                                    <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold mb-1 ${getStatusColor(swap.status)}`}>
-                                                        {swap.status}
-                                                    </span>
-                                                    <div className="text-sm font-bold text-gray-900">
-                                                        ขอสลับวันหยุด
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-xs text-gray-500 mb-1">วันที่ยื่น</div>
-                                                    <div className="text-sm font-medium text-gray-800">
-                                                        {swap.createdAt ? format(swap.createdAt instanceof Date ? swap.createdAt : (swap.createdAt as any).toDate(), "d MMM", { locale: th }) : "-"}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 mt-2 pl-2 text-sm">
-                                                <div className="flex-1 bg-gray-50 rounded p-2 text-center">
-                                                    <div className="text-xs text-gray-500">วันหยุดเดิม</div>
-                                                    <div className="font-bold text-gray-800">
-                                                        {format(swap.workDate instanceof Date ? swap.workDate : (swap.workDate as any).toDate(), "d MMM", { locale: th })}
-                                                    </div>
-                                                </div>
-                                                <div className="text-gray-400">→</div>
-                                                <div className="flex-1 bg-blue-50 rounded p-2 text-center">
-                                                    <div className="text-xs text-blue-500">วันหยุดใหม่</div>
-                                                    <div className="font-bold text-blue-700">
-                                                        {format(swap.holidayDate instanceof Date ? swap.holidayDate : (swap.holidayDate as any).toDate(), "d MMM", { locale: th })}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {swap.reason && (
-                                                <div className="text-xs text-gray-500 pl-2 mt-3 pt-2 border-t border-gray-50">
-                                                    เหตุผล: {swap.reason}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))
-                                )
-                            )}
-                        </div>
-                    )}
-                </div>
+                    ))
+                )}
             </main>
         </div>
     );

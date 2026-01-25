@@ -22,7 +22,8 @@ import {
     ChevronDown,
     Database,
     UserCog,
-    FileCheck
+    FileCheck,
+    History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "firebase/auth";
@@ -67,6 +68,7 @@ const menuGroups: MenuGroup[] = [
             { icon: FileText, label: "การลา", href: "/admin/leave" },
             { icon: Clock, label: "ขอทำงานล่วงเวลา", href: "/admin/ot" },
             { icon: ArrowLeftRight, label: "สลับวันหยุด", href: "/admin/approvals/swap" },
+            { icon: History, label: "ปรับเวลา/ลงย้อนหลัง", href: "/admin/time-correction" },
         ]
     },
     {
@@ -208,4 +210,3 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
         </>
     );
 }
-

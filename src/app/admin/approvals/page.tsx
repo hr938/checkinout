@@ -2,17 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { leaveService, otService, swapService, type LeaveRequest, type OTRequest, type SwapRequest } from "@/lib/firestore";
+import { leaveService, otService, swapService, timeRequestService, attendanceService, type LeaveRequest, type OTRequest, type SwapRequest, type TimeRequest, type Attendance } from "@/lib/firestore";
 import { CheckCircle, XCircle, Clock, FileText, Calendar, Image as ImageIcon, X, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { CustomAlert } from "@/components/ui/custom-alert";
+import { isLate, getLateMinutes } from "@/lib/workTime";
 
 export default function ApprovalsPage() {
-    const [activeTab, setActiveTab] = useState<"leave" | "ot" | "swap">("leave");
+    const [activeTab, setActiveTab] = useState<"leave" | "ot" | "swap" | "time">("leave");
     const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
     const [otRequests, setOtRequests] = useState<OTRequest[]>([]);
     const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
+    const [timeRequests, setTimeRequests] = useState<TimeRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [alertState, setAlertState] = useState<{
@@ -28,7 +30,7 @@ export default function ApprovalsPage() {
     });
     const [rejectModal, setRejectModal] = useState<{
         isOpen: boolean;
-        type: "leave" | "ot" | "swap";
+        type: "leave" | "ot" | "swap" | "time";
         id: string | null;
         action: "approve" | "reject";
         reason: string;
@@ -43,16 +45,18 @@ export default function ApprovalsPage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [leaves, ots, swaps] = await Promise.all([
+            const [leaves, ots, swaps, times] = await Promise.all([
                 leaveService.getAll(),
                 otService.getAll(),
-                swapService.getAll()
+                swapService.getAll(),
+                timeRequestService.getPending()
             ]);
 
             // Filter only pending requests
             setLeaveRequests(leaves.filter(r => r.status === "รออนุมัติ"));
             setOtRequests(ots.filter(r => r.status === "รออนุมัติ"));
             setSwapRequests(swaps.filter(r => r.status === "รออนุมัติ"));
+            setTimeRequests(times);
         } catch (error) {
             console.error("Error fetching requests:", error);
         } finally {
@@ -64,7 +68,7 @@ export default function ApprovalsPage() {
         fetchData();
     }, []);
 
-    const handleAction = (type: "leave" | "ot" | "swap", id: string, action: "approve" | "reject") => {
+    const handleAction = (type: "leave" | "ot" | "swap" | "time", id: string, action: "approve" | "reject") => {
         setRejectModal({
             isOpen: true,
             type,
@@ -86,11 +90,84 @@ export default function ApprovalsPage() {
             } else if (type === "ot") {
                 await otService.updateStatus(id!, status, reason);
             } else if (type === "swap") {
-                await swapService.updateStatus(id!, status, reason); // Ensure swapService supports reason if needed
+                await swapService.updateStatus(id!, status, reason);
+            } else if (type === "time") {
+                await timeRequestService.updateStatus(id!, status, reason);
+
+                if (action === "approve") {
+                    const req = timeRequests.find(r => r.id === id);
+                    if (req) {
+                        try {
+                            const startOfDay = new Date(req.date); startOfDay.setHours(0, 0, 0, 0);
+                            const endOfDay = new Date(req.date); endOfDay.setHours(23, 59, 59, 999);
+                            const history = await attendanceService.getHistory(req.employeeId, startOfDay, endOfDay);
+
+                            const targetStatus = req.type;
+                            const existingRecord = history.find(h => h.status === targetStatus);
+
+                            if (existingRecord && existingRecord.id) {
+                                // Update existing
+                                const updates: Partial<Attendance> = { locationNote: `Approver Edit: ${reason || req.reason}` };
+                                if (req.type === "เข้างาน") {
+                                    updates.checkIn = req.time;
+
+                                    // Recalculate Late Status
+                                    // Note: In a real app, you might need to fetch dynamic shift config here.
+                                    // For now, using default logic from workTime.ts
+                                    const late = isLate(req.time instanceof Date ? req.time : (req.time as any).toDate());
+                                    const minutes = getLateMinutes(req.time instanceof Date ? req.time : (req.time as any).toDate());
+
+                                    updates.status = "เข้างาน"; // Always "เข้างาน", just flag lateMinutes
+                                    updates.lateMinutes = late ? minutes : 0;
+                                }
+                                if (req.type === "ออกงาน") updates.checkOut = req.time;
+                                if (req.type.includes("พัก")) updates.checkIn = req.time;
+
+                                await attendanceService.update(existingRecord.id, updates);
+                            } else {
+                                // Create new
+                                const newAtt: any = {
+                                    employeeId: req.employeeId,
+                                    employeeName: req.employeeName,
+                                    date: req.date,
+                                    status: targetStatus,
+                                    locationNote: `Manual Request: ${req.reason}`
+                                };
+                                if (req.type === "เข้างาน") {
+                                    newAtt.checkIn = req.time;
+
+                                    // Calculate Late Status for new record
+                                    const late = isLate(req.time instanceof Date ? req.time : (req.time as any).toDate());
+                                    const minutes = getLateMinutes(req.time instanceof Date ? req.time : (req.time as any).toDate());
+
+                                    newAtt.status = "เข้างาน"; // Always "เข้างาน", just flag lateMinutes
+                                    newAtt.lateMinutes = late ? minutes : 0;
+                                }
+                                else if (req.type === "ออกงาน") newAtt.checkOut = req.time;
+                                else newAtt.checkIn = req.time;
+
+                                await attendanceService.create(newAtt);
+                            }
+                        } catch (err) {
+                            console.error("Error auto-creating attendance:", err);
+                        }
+                    }
+                }
             }
 
             setRejectModal(prev => ({ ...prev, isOpen: false }));
             fetchData();
+
+            // Show auto success for time correction
+            if (type === 'time' && action === 'approve') {
+                setAlertState({
+                    isOpen: true,
+                    title: "สำเร็จ",
+                    message: "อนุมัติการปรับเวลาและอัพเดทข้อมูลการเข้างานเรียบร้อยแล้ว",
+                    type: "success"
+                });
+            }
+
         } catch (error) {
             console.error("Error updating status:", error);
             setAlertState({
@@ -110,10 +187,10 @@ export default function ApprovalsPage() {
             />
 
             {/* Tabs */}
-            <div className="flex gap-4 border-b border-gray-200">
+            <div className="flex gap-4 border-b border-gray-200 overflow-x-auto">
                 <button
                     onClick={() => setActiveTab("leave")}
-                    className={`pb-4 px-4 font-medium text-sm transition-colors relative ${activeTab === "leave"
+                    className={`pb-4 px-4 font-medium text-sm transition-colors relative whitespace-nowrap ${activeTab === "leave"
                         ? "text-blue-600"
                         : "text-gray-500 hover:text-gray-700"
                         }`}
@@ -125,7 +202,7 @@ export default function ApprovalsPage() {
                 </button>
                 <button
                     onClick={() => setActiveTab("ot")}
-                    className={`pb-4 px-4 font-medium text-sm transition-colors relative ${activeTab === "ot"
+                    className={`pb-4 px-4 font-medium text-sm transition-colors relative whitespace-nowrap ${activeTab === "ot"
                         ? "text-blue-600"
                         : "text-gray-500 hover:text-gray-700"
                         }`}
@@ -137,7 +214,7 @@ export default function ApprovalsPage() {
                 </button>
                 <button
                     onClick={() => setActiveTab("swap")}
-                    className={`pb-4 px-4 font-medium text-sm transition-colors relative ${activeTab === "swap"
+                    className={`pb-4 px-4 font-medium text-sm transition-colors relative whitespace-nowrap ${activeTab === "swap"
                         ? "text-blue-600"
                         : "text-gray-500 hover:text-gray-700"
                         }`}
@@ -145,6 +222,18 @@ export default function ApprovalsPage() {
                     คำขอสลับวัน ({swapRequests.length})
                     {activeTab === "swap" && (
                         <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-t-full" />
+                    )}
+                </button>
+                <button
+                    onClick={() => setActiveTab("time")}
+                    className={`pb-4 px-4 font-medium text-sm transition-colors relative whitespace-nowrap ${activeTab === "time"
+                        ? "text-green-600"
+                        : "text-gray-500 hover:text-gray-700"
+                        }`}
+                >
+                    ปรับเวลา ({timeRequests.length})
+                    {activeTab === "time" && (
+                        <div className="absolute bottom-0 left-0 w-full h-0.5 bg-green-600 rounded-t-full" />
                     )}
                 </button>
             </div>
@@ -314,6 +403,69 @@ export default function ApprovalsPage() {
                                             </button>
                                             <button
                                                 onClick={() => handleAction("swap", req.id!, "reject")}
+                                                className="flex-1 md:flex-none px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                                            >
+                                                <XCircle className="w-4 h-4" />
+                                                ไม่อนุมัติ
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )
+                    )}
+
+                    {activeTab === "time" && (
+                        timeRequests.length === 0 ? (
+                            <div className="text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200 text-gray-500">
+                                ไม่มีคำขอปรับเวลาที่รออนุมัติ
+                            </div>
+                        ) : (
+                            <div className="grid gap-4">
+                                {timeRequests.map((req) => (
+                                    <div key={req.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-gray-900">{req.employeeName}</span>
+                                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${req.type === 'เข้างาน' ? 'bg-green-100 text-green-700' :
+                                                    req.type === 'ออกงาน' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                                                    }`}>
+                                                    {req.type}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-gray-500 my-2">
+                                                <Calendar className="w-4 h-4" />
+                                                {format(req.date instanceof Date ? req.date : (req.date as any).toDate(), "d MMM yy", { locale: th })}
+                                                <Clock className="w-4 h-4 ml-2" />
+                                                <span className="font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-md">
+                                                    {format(req.time instanceof Date ? req.time : (req.time as any).toDate(), "HH:mm")}
+                                                </span>
+                                            </div>
+                                            <div className="text-sm text-gray-600">
+                                                เหตุผล: {req.reason}
+                                            </div>
+                                            {req.attachment && (
+                                                <div className="pt-2">
+                                                    <button
+                                                        onClick={() => setViewingImage(req.attachment || null)}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-100 text-sm text-blue-600"
+                                                    >
+                                                        <ImageIcon className="w-4 h-4" />
+                                                        ดูหลักฐาน
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2 w-full md:w-auto">
+                                            <button
+                                                onClick={() => handleAction("time", req.id!, "approve")}
+                                                className="flex-1 md:flex-none px-4 py-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                                            >
+                                                <CheckCircle className="w-4 h-4" />
+                                                อนุมัติ
+                                            </button>
+                                            <button
+                                                onClick={() => handleAction("time", req.id!, "reject")}
                                                 className="flex-1 md:flex-none px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                                             >
                                                 <XCircle className="w-4 h-4" />

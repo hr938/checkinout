@@ -122,6 +122,20 @@ const REQUIRED_QUERIES: {
             )
         },
         {
+            name: "Employees by Status (Sorted by Name)",
+            collection: "employees",
+            buildQuery: () => query(
+                collection(db, "employees"),
+                where("status", "==", "__test__"),
+                orderBy("name", "asc"),
+                limit(1)
+            ),
+            fields: [
+                { fieldPath: "status", order: "ASCENDING" },
+                { fieldPath: "name", order: "ASCENDING" }
+            ]
+        },
+        {
             name: "Admins by Email",
             collection: "admins",
             buildQuery: () => query(
@@ -184,6 +198,48 @@ const REQUIRED_QUERIES: {
             fields: [
                 { fieldPath: "employeeId", order: "ASCENDING" },
                 { fieldPath: "startDate", order: "DESCENDING" }
+            ]
+        },
+        {
+            name: "Time Requests by Employee",
+            collection: "timeRequests",
+            buildQuery: () => query(
+                collection(db, "timeRequests"),
+                where("employeeId", "==", "__test__"),
+                orderBy("createdAt", "desc"),
+                limit(1)
+            ),
+            fields: [
+                { fieldPath: "employeeId", order: "ASCENDING" },
+                { fieldPath: "createdAt", order: "DESCENDING" }
+            ]
+        },
+        {
+            name: "Time Requests by Status",
+            collection: "timeRequests",
+            buildQuery: () => query(
+                collection(db, "timeRequests"),
+                where("status", "==", "__test__"),
+                orderBy("createdAt", "desc"),
+                limit(1)
+            ),
+            fields: [
+                { fieldPath: "status", order: "ASCENDING" },
+                { fieldPath: "createdAt", order: "DESCENDING" }
+            ]
+        },
+        {
+            name: "Swap Requests by Status",
+            collection: "swapRequests",
+            buildQuery: () => query(
+                collection(db, "swapRequests"),
+                where("status", "==", "__test__"),
+                orderBy("createdAt", "desc"),
+                limit(1)
+            ),
+            fields: [
+                { fieldPath: "status", order: "ASCENDING" },
+                { fieldPath: "createdAt", order: "DESCENDING" }
             ]
         }
     ];

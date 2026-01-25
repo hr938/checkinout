@@ -1,18 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { leaveService, otService, swapService, type LeaveRequest, type OTRequest, type SwapRequest } from "@/lib/firestore";
+import { leaveService, otService, swapService, timeRequestService, attendanceService, type LeaveRequest, type OTRequest, type SwapRequest, type TimeRequest, type Attendance } from "@/lib/firestore";
 import { CheckCircle, XCircle, Clock, FileText, Calendar, ChevronLeft, ArrowRight, Image as ImageIcon, X } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CustomAlert } from "@/components/ui/custom-alert";
+import { isLate, getLateMinutes } from "@/lib/workTime";
 
 export default function LiffApprovalsPage() {
-    const [activeTab, setActiveTab] = useState<"leave" | "ot" | "swap">("leave");
+    const [activeTab, setActiveTab] = useState<"leave" | "ot" | "swap" | "time">("leave");
     const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
     const [otRequests, setOtRequests] = useState<OTRequest[]>([]);
     const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
+    const [timeRequests, setTimeRequests] = useState<TimeRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [liffError, setLiffError] = useState("");
     const [viewingImage, setViewingImage] = useState<string | null>(null);
@@ -89,16 +91,18 @@ export default function LiffApprovalsPage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [leaves, ots, swaps] = await Promise.all([
+            const [leaves, ots, swaps, times] = await Promise.all([
                 leaveService.getAll(),
                 otService.getAll(),
-                swapService.getAll()
+                swapService.getAll(),
+                timeRequestService.getPending()
             ]);
 
             // Filter only pending requests
             setLeaveRequests(leaves.filter(r => r.status === "รออนุมัติ"));
             setOtRequests(ots.filter(r => r.status === "รออนุมัติ"));
             setSwapRequests(swaps.filter(r => r.status === "รออนุมัติ"));
+            setTimeRequests(times);
         } catch (error) {
             console.error("Error fetching requests:", error);
         } finally {
@@ -106,7 +110,7 @@ export default function LiffApprovalsPage() {
         }
     };
 
-    const notifyEmployee = async (employeeId: string, type: "leave" | "ot" | "swap", status: "อนุมัติ" | "ไม่อนุมัติ", details: string) => {
+    const notifyEmployee = async (employeeId: string, type: "leave" | "ot" | "swap" | "time", status: "อนุมัติ" | "ไม่อนุมัติ", details: string) => {
         try {
             await fetch("/api/line/notify-employee", {
                 method: "POST",
@@ -123,6 +127,104 @@ export default function LiffApprovalsPage() {
         } catch (error) {
             console.error("Error notifying employee:", error);
         }
+    };
+
+    const handleApproveTime = (req: TimeRequest) => {
+        showConfirm("ยืนยันการอนุมัติ", `อนุมัติคำขอปรับเวลาของ ${req.employeeName}?`, async () => {
+            closeConfirm();
+            try {
+                // 1. Update Request Status
+                await timeRequestService.updateStatus(req.id!, "อนุมัติ");
+
+                // 2. Auto Create/Update Attendance (Logic from Admin)
+                try {
+                    const startOfDay = new Date(req.date); startOfDay.setHours(0, 0, 0, 0);
+                    const endOfDay = new Date(req.date); endOfDay.setHours(23, 59, 59, 999);
+                    const history = await attendanceService.getHistory(req.employeeId, startOfDay, endOfDay);
+
+                    const targetStatus = req.type;
+                    const existingRecord = history.find(h => h.status === targetStatus);
+
+                    if (existingRecord && existingRecord.id) {
+                        // Update existing
+                        const updates: Partial<Attendance> = { locationNote: `คำขอปรับเวลา: ${req.reason}` };
+                        if (req.type === "เข้างาน") {
+                            updates.checkIn = req.time;
+
+                            // Recalculate Late Status
+                            const late = isLate(req.time instanceof Date ? req.time : (req.time as any).toDate());
+                            const minutes = getLateMinutes(req.time instanceof Date ? req.time : (req.time as any).toDate());
+
+                            updates.status = "เข้างาน"; // Always "เข้างาน", just flag lateMinutes
+                            updates.lateMinutes = late ? minutes : 0;
+                        }
+                        if (req.type === "ออกงาน") updates.checkOut = req.time;
+                        if (req.type.includes("พัก")) updates.checkIn = req.time;
+
+                        await attendanceService.update(existingRecord.id, updates);
+                    } else {
+                        // Create new
+                        const newAtt: any = {
+                            employeeId: req.employeeId,
+                            employeeName: req.employeeName,
+                            date: req.date,
+                            status: targetStatus,
+                            locationNote: `คำขอปรับเวลา: ${req.reason}`
+                        };
+                        if (req.type === "เข้างาน") {
+                            newAtt.checkIn = req.time;
+
+                            // Calculate Late Status for new record
+                            const late = isLate(req.time instanceof Date ? req.time : (req.time as any).toDate());
+                            const minutes = getLateMinutes(req.time instanceof Date ? req.time : (req.time as any).toDate());
+
+                            newAtt.status = "เข้างาน"; // Always "เข้างาน", just flag lateMinutes
+                            newAtt.lateMinutes = late ? minutes : 0;
+                        }
+                        else if (req.type === "ออกงาน") newAtt.checkOut = req.time;
+                        else newAtt.checkIn = req.time;
+
+                        await attendanceService.create(newAtt);
+                    }
+                } catch (err) {
+                    console.error("Error auto-creating attendance:", err);
+                }
+
+                // 3. Notify
+                await notifyEmployee(
+                    req.employeeId,
+                    "time", // Note: Ensure API handles 'time' type or map it appropriately if needed, but 'time' is consistent with backend types usually
+                    "อนุมัติ",
+                    `ปรับเวลา: ${req.type} ${format(req.time instanceof Date ? req.time : (req.time as any).toDate(), "HH:mm")}`
+                );
+
+                showAlert("สำเร็จ", "อนุมัติคำขอปรับเวลาเรียบร้อยแล้ว", "success");
+                fetchData();
+            } catch (error) {
+                console.error(error);
+                showAlert("เกิดข้อผิดพลาด", "ไม่สามารถดำเนินการได้", "error");
+            }
+        }, "info");
+    };
+
+    const handleRejectTime = (req: TimeRequest) => {
+        showConfirm("ยืนยันการปฏิเสธ", `ปฏิเสธคำขอปรับเวลาของ ${req.employeeName}?`, async () => {
+            closeConfirm();
+            try {
+                await timeRequestService.updateStatus(req.id!, "ไม่อนุมัติ");
+                await notifyEmployee(
+                    req.employeeId,
+                    "time", // Using 'time' as type for consistency with other parts, or modify API if it expects strict types
+                    "ไม่อนุมัติ",
+                    `ปรับเวลา: ${req.type}`
+                );
+                showAlert("สำเร็จ", "ปฏิเสธคำขอปรับเวลาเรียบร้อยแล้ว", "success");
+                fetchData();
+            } catch (error) {
+                console.error(error);
+                showAlert("เกิดข้อผิดพลาด", "ไม่สามารถดำเนินการได้", "error");
+            }
+        }, "danger");
     };
 
     const handleApproveLeave = (req: LeaveRequest) => {
@@ -282,6 +384,15 @@ export default function LiffApprovalsPage() {
                             }`}
                     >
                         สลับวัน ({swapRequests.length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("time")}
+                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === "time"
+                            ? "bg-white text-green-600 shadow-sm"
+                            : "text-gray-500"
+                            }`}
+                    >
+                        เวลา ({timeRequests.length})
                     </button>
                 </div>
             </div>
@@ -465,6 +576,74 @@ export default function LiffApprovalsPage() {
                                                 <button
                                                     onClick={() => handleApproveSwap(req)}
                                                     className="flex-1 py-2.5 bg-primary-dark text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm font-bold shadow-lg shadow-blue-900/20"
+                                                >
+                                                    <CheckCircle className="w-4 h-4" />
+                                                    อนุมัติ
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )
+                        )}
+
+                        {activeTab === "time" && (
+                            timeRequests.length === 0 ? (
+                                <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200 text-gray-500">
+                                    ไม่มีคำขอปรับเวลาที่รออนุมัติ
+                                </div>
+                            ) : (
+                                <div className="grid gap-4">
+                                    {timeRequests.map((req) => (
+                                        <div key={req.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <div className="font-bold text-gray-900 text-lg">{req.employeeName}</div>
+                                                    <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium mt-1 ${req.type === 'เข้างาน' ? 'bg-green-100 text-green-700' :
+                                                        req.type === 'ออกงาน' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                                                        }`}>
+                                                        {req.type}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2 mb-4">
+                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                    <Calendar className="w-4 h-4 text-gray-400" />
+                                                    {format(req.date instanceof Date ? req.date : (req.date as any).toDate(), "d MMM yy", { locale: th })}
+                                                    <Clock className="w-4 h-4 ml-2 text-gray-400" />
+                                                    <span className="font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-md">
+                                                        {format(req.time instanceof Date ? req.time : (req.time as any).toDate(), "HH:mm")}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-start gap-2 text-sm text-gray-600">
+                                                    <FileText className="w-4 h-4 text-gray-400 mt-0.5" />
+                                                    <span className="flex-1">{req.reason}</span>
+                                                </div>
+                                                {req.attachment && (
+                                                    <div className="flex items-center gap-2 text-sm text-blue-600 mt-2">
+                                                        <button
+                                                            onClick={() => setViewingImage(req.attachment || null)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-100"
+                                                        >
+                                                            <ImageIcon className="w-4 h-4" />
+                                                            ดูหลักฐาน
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="flex gap-3 pt-3 border-t border-gray-50">
+                                                <button
+                                                    onClick={() => handleRejectTime(req)}
+                                                    className="flex-1 py-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2 text-sm font-bold"
+                                                >
+                                                    <XCircle className="w-4 h-4" />
+                                                    ไม่อนุมัติ
+                                                </button>
+                                                <button
+                                                    onClick={() => handleApproveTime(req)}
+                                                    className="flex-1 py-2.5 bg-primary-dark text-white rounded-xl hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-sm font-bold shadow-lg shadow-green-900/20"
                                                 >
                                                     <CheckCircle className="w-4 h-4" />
                                                     อนุมัติ

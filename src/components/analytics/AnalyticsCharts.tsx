@@ -1,6 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+
+// Debounce utility
+function useDebounce<T>(value: T, delay: number): T {
+    const [debouncedValue, setDebouncedValue] = useState<T>(value);
+    useEffect(() => {
+        const handler = setTimeout(() => setDebouncedValue(value), delay);
+        return () => clearTimeout(handler);
+    }, [value, delay]);
+    return debouncedValue;
+}
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,13 +46,21 @@ import {
     type OTRequest,
     type LeaveRequest
 } from "@/lib/firestore";
-import { format, subDays, subMonths, subYears, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, isSameDay, isWithinInterval, eachDayOfInterval, parseISO } from "date-fns";
+import {
+    getAttendanceByDateRangeWithoutPhoto,
+    getLeaveByDateRangeWithoutAttachment
+} from "@/lib/firestoreRest";
+import { format, subDays, subMonths, subYears, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, isSameDay, isWithinInterval, eachDayOfInterval, parseISO, differenceInDays } from "date-fns";
 import { th } from "date-fns/locale";
 import { isLate, getLateMinutes, formatMinutesToHours } from "@/lib/workTime";
 import { Users, UserCheck, Clock, CalendarOff, Download, Filter, CheckSquare, Square, X, FileSpreadsheet, Calendar } from "lucide-react";
 
 const COLORS = ["#059669", "#10B981", "#34D399", "#6EE7B7", "#C6F6D5"];
 const LEAVE_COLORS = ["#FF8042", "#00C49F", "#FFBB28", "#0088FE"];
+
+// ===== SMART DATE RANGE LIMIT =====
+// ป้องกันการดึงข้อมูลมากเกินไป
+const MAX_DAYS_TO_FETCH = 31; // ไม่ดึงเกิน 31 วัน ณ จุดหนึ่ง
 
 export function AnalyticsCharts() {
     const [loading, setLoading] = useState(true);
@@ -118,6 +136,20 @@ export function AnalyticsCharts() {
         note: true
     });
 
+    // ===== PERFORMANCE OPTIMIZATION =====
+    // Debounce filter values to prevent excessive API calls
+    const debouncedStartDate = useDebounce(startDate, 500);
+    const debouncedEndDate = useDebounce(endDate, 500);
+    const debouncedEmployeeType = useDebounce(selectedEmployeeType, 300);
+
+    // Cache for fetched data to avoid re-fetching
+    const dataCache = useRef<{
+        key: string;
+        attendance: Attendance[];
+        leaves: LeaveRequest[];
+        ot: OTRequest[];
+    } | null>(null);
+
     // Load employees once on mount
     useEffect(() => {
         const fetchEmployees = async () => {
@@ -133,23 +165,35 @@ export function AnalyticsCharts() {
         fetchEmployees();
     }, []);
 
+    // Use debounced values for triggering data load
     useEffect(() => {
         if (!loadingEmployees) {
             loadData();
         }
-    }, [startDate, endDate, selectedEmployeeType, loadingEmployees]);
+    }, [debouncedStartDate, debouncedEndDate, debouncedEmployeeType, loadingEmployees]);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const start = startOfDay(parseISO(startDate));
-            const end = endOfDay(parseISO(endDate));
+            let start = startOfDay(parseISO(debouncedStartDate));
+            let end = endOfDay(parseISO(debouncedEndDate));
+
+            // ===== SMART DATE RANGE LIMIT =====
+            // ป้องกันการดึงข้อมูลเกิน 31 วัน
+            const daysDiff = differenceInDays(end, start);
+            if (daysDiff > MAX_DAYS_TO_FETCH) {
+                // Auto-adjust: ดึงข้อมูลแค่ 31 วันล่าสุด
+                start = startOfDay(subDays(end, MAX_DAYS_TO_FETCH - 1));
+                console.log(`⚠️ Date range limited to ${MAX_DAYS_TO_FETCH} days for performance`);
+            }
+
+            const cacheKey = `${format(start, 'yyyy-MM-dd')}_${format(end, 'yyyy-MM-dd')}`;
 
             // Use cached employees
             const allEmployees = cachedEmployees;
-            const filteredEmployees = selectedEmployeeType === "all"
+            const filteredEmployees = debouncedEmployeeType === "all"
                 ? allEmployees
-                : allEmployees.filter(emp => emp.type === selectedEmployeeType);
+                : allEmployees.filter(emp => emp.type === debouncedEmployeeType);
 
             const filteredEmployeeIds = new Set(filteredEmployees.map(e => e.id));
             const totalEmployees = filteredEmployees.length;
@@ -162,12 +206,37 @@ export function AnalyticsCharts() {
             }, {} as Record<string, number>);
             setEmployeeTypeData(Object.entries(typeCount).map(([name, value]) => ({ name, value })));
 
-            // Parallel Data Fetching
-            const [rangeAttendance, rangeLeaves, rangeOT] = await Promise.all([
-                attendanceService.getByDateRange(start, end),
-                leaveService.getByDateRange(start, end),
-                otService.getByDateRange(start, end)
-            ]);
+            // ===== USE CACHED DATA IF SAME DATE RANGE =====
+            let rangeAttendance: Attendance[];
+            let rangeLeaves: LeaveRequest[];
+            let rangeOT: OTRequest[];
+
+            if (dataCache.current && dataCache.current.key === cacheKey) {
+                // Use cached data - no API call needed!
+                rangeAttendance = dataCache.current.attendance;
+                rangeLeaves = dataCache.current.leaves;
+                rangeOT = dataCache.current.ot;
+            } else {
+                // ===== USE REST API WITH FIELD SELECTION =====
+                // This actually excludes photo/attachment from network transfer!
+                const [restAttendance, restLeaves, otData] = await Promise.all([
+                    getAttendanceByDateRangeWithoutPhoto(start, end, 500),
+                    getLeaveByDateRangeWithoutAttachment(start, end, 200),
+                    otService.getByDateRange(start, end)
+                ]);
+
+                rangeAttendance = restAttendance as Attendance[];
+                rangeLeaves = restLeaves as LeaveRequest[];
+                rangeOT = otData;
+
+                // Store in cache
+                dataCache.current = {
+                    key: cacheKey,
+                    attendance: rangeAttendance,
+                    leaves: rangeLeaves,
+                    ot: rangeOT
+                };
+            }
 
             // 1. Process Attendance
             const filteredAttendance = rangeAttendance.filter(a => filteredEmployeeIds.has(a.employeeId));
