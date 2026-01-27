@@ -70,8 +70,7 @@ export async function getAttendanceByDateRangeWithoutPhoto(
 ): Promise<any[]> {
     const token = await getAuthToken();
     if (!token) {
-        console.error('No auth token available');
-        return [];
+        console.warn('No auth token available, proceeding without authentication');
     }
 
     const start = new Date(startDate);
@@ -129,14 +128,18 @@ export async function getAttendanceByDateRangeWithoutPhoto(
     };
 
     try {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch(
             `${FIRESTORE_BASE_URL}:runQuery`,
             {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
+                headers,
                 body: JSON.stringify(queryBody)
             }
         );
@@ -172,8 +175,7 @@ export async function getLeaveByDateRangeWithoutAttachment(
 ): Promise<any[]> {
     const token = await getAuthToken();
     if (!token) {
-        console.error('No auth token available');
-        return [];
+        console.warn('No auth token available, proceeding without authentication');
     }
 
     const start = new Date(startDate);
@@ -227,14 +229,18 @@ export async function getLeaveByDateRangeWithoutAttachment(
     };
 
     try {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch(
             `${FIRESTORE_BASE_URL}:runQuery`,
             {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
+                headers,
                 body: JSON.stringify(queryBody)
             }
         );
@@ -268,8 +274,7 @@ export async function getAttendanceByEmployeeIdWithoutPhoto(
 ): Promise<any[]> {
     const token = await getAuthToken();
     if (!token) {
-        console.error('No auth token available');
-        return [];
+        console.warn('No auth token available, proceeding without authentication');
     }
 
     // Fields to fetch (EXCLUDES photo!)
@@ -307,14 +312,18 @@ export async function getAttendanceByEmployeeIdWithoutPhoto(
     };
 
     try {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch(
             `${FIRESTORE_BASE_URL}:runQuery`,
             {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
+                headers,
                 body: JSON.stringify(queryBody)
             }
         );
